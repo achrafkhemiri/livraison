@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🚚 Smart Delivery OSRM - Plus Court Chemin</title>
+    <link rel="icon" href="data:," />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="smart_delivery_osrm.css" />
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>🚚 Smart Delivery OSRM</h1>
+                <p>Plus Court Chemin - OSRM Tunisie 🇹🇳</p>
+                <div class="osrm-status">
+                    <div class="status-dot" id="osrm-status-dot"></div>
+                    <span id="osrm-status-text">Vérification OSRM...</span>
+                </div>
+            </div>
+
+            <div class="sidebar-content">
+                <div class="section">
+                    <div class="section-title"><i class="fa-solid fa-truck"></i> Livreur (Dépôt)</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="depot-lat">Latitude</label>
+                            <input id="depot-lat" type="number" step="0.000001" value="34.740000" />
+                        </div>
+                        <div class="form-group">
+                            <label for="depot-lon">Longitude</label>
+                            <input id="depot-lon" type="number" step="0.000001" value="10.760000" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <button class="btn btn-secondary" type="button" onclick="setDepotOnMap()">
+                            <i class="fa-solid fa-location-dot"></i> Définir sur la carte
+                        </button>
+                        <button class="btn btn-secondary" type="button" onclick="centerOnDepot()">
+                            <i class="fa-solid fa-bullseye"></i> Centrer
+                        </button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title"><i class="fa-solid fa-box"></i> Clients</div>
+
+                    <div class="form-group search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input id="client-search" type="text" placeholder="Rechercher (ex: ORDSF...)" oninput="filterClients()" />
+                    </div>
+
+                    <div class="form-row">
+                        <button class="btn btn-secondary" type="button" onclick="selectAllClients()">
+                            <i class="fa-solid fa-check-double"></i> Tout
+                        </button>
+                        <button class="btn btn-secondary" type="button" onclick="deselectAllClients()">
+                            <i class="fa-solid fa-xmark"></i> Aucun
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 10px; font-size: 0.85rem; opacity: 0.9;">
+                        Sélectionnés: <b><span id="selected-count">0</span></b>
+                    </div>
+                    <div id="client-list" class="client-list"></div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title"><i class="fa-solid fa-plus"></i> Ajouter un client</div>
+                    <div class="form-group">
+                        <label for="new-client-id">ID commande</label>
+                        <input id="new-client-id" type="text" placeholder="ORDXXX" />
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="new-client-lat">Latitude</label>
+                            <input id="new-client-lat" type="number" step="0.000001" placeholder="34.xxxxxx" />
+                        </div>
+                        <div class="form-group">
+                            <label for="new-client-lon">Longitude</label>
+                            <input id="new-client-lon" type="number" step="0.000001" placeholder="10.xxxxxx" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <button class="btn btn-secondary" type="button" onclick="addClientOnMap()">
+                            <i class="fa-solid fa-map"></i> Choisir sur carte
+                        </button>
+                        <button class="btn btn-primary" type="button" onclick="addNewClient()">
+                            <i class="fa-solid fa-plus"></i> Ajouter
+                        </button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title"><i class="fa-solid fa-route"></i> Optimisation</div>
+                    <button class="btn btn-primary" type="button" onclick="calculateOptimalRoute()">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Calculer le trajet optimal
+                    </button>
+                    <div style="height: 10px;"></div>
+                    <button class="btn btn-danger" type="button" onclick="clearRoute()">
+                        <i class="fa-solid fa-trash"></i> Effacer la route
+                    </button>
+
+                    <div id="results-panel" class="results-panel" style="display:none;">
+                        <h3>Résultats</h3>
+                        <div class="stat-row">
+                            <div class="stat-label">Distance</div>
+                            <div class="stat-value" id="total-distance">-</div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Temps</div>
+                            <div class="stat-value" id="total-time">-</div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Stops</div>
+                            <div class="stat-value" id="num-stops">-</div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Routing</div>
+                            <div class="stat-value" id="routing-type">-</div>
+                        </div>
+
+                        <div id="route-order" class="route-order"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="map-container">
+            <div id="map"></div>
+
+            <div class="map-controls">
+                <button class="map-btn" type="button" title="Centrer sur dépôt" onclick="centerOnDepot()">
+                    <i class="fa-solid fa-bullseye"></i>
+                </button>
+                <button class="map-btn" type="button" title="Voir tous les points" onclick="fitAllMarkers()">
+                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <div id="loading" class="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text" class="loading-text">Chargement...</div>
+        <div id="loading-subtext" class="loading-subtext">Veuillez patienter</div>
+
+        <div class="progress-container" style="width: 320px; margin-top: 20px;">
+            <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+            <div id="progress-text" class="progress-text"></div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-ant-path@1.3.0/dist/leaflet-ant-path.min.js"></script>
+    <script src="smart_delivery_osrm.js"></script>
+</body>
+</html>

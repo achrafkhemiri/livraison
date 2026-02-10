@@ -1,0 +1,29 @@
+# Root .gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OSRM data (large files - too big for GitHub)
+osrm-data/
+
+# Test files
+test_*.dart
