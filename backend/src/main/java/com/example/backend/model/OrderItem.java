@@ -26,7 +26,7 @@ public class OrderItem {
     @JoinColumn(name = "product_id")
     private Produit produit;
     
-    @Column(name = "quantity")
+    @Column(name = "quantite")
     private Integer quantity;
     
     @Column(name = "price_uht", precision = 10, scale = 2)
@@ -60,7 +60,7 @@ public class OrderItem {
     private BigDecimal remise;
     
     @Column(name = "version")
-    private Integer version;
+    private Integer version = 1;
     
     // Helper to get actual quantity
     public Integer getActualQuantity() {

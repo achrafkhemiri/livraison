@@ -26,6 +26,9 @@ class Order {
   final DateTime? dateLivraisonEffective;
   final String? notes;
   final List<OrderItem>? items;
+  final bool? collected;
+  final String? collectionPlan;
+  final DateTime? dateCollection;
 
   Order({
     this.id,
@@ -55,6 +58,9 @@ class Order {
     this.dateLivraisonEffective,
     this.notes,
     this.items,
+    this.collected,
+    this.collectionPlan,
+    this.dateCollection,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -88,6 +94,9 @@ class Order {
       items: json['items'] != null 
           ? (json['items'] as List).map((e) => OrderItem.fromJson(e)).toList()
           : null,
+      collected: json['collected'],
+      collectionPlan: json['collectionPlan'],
+      dateCollection: json['dateCollection'] != null ? DateTime.parse(json['dateCollection']) : null,
     );
   }
 
@@ -146,6 +155,9 @@ class Order {
     double? latitudeLivraison,
     double? longitudeLivraison,
     String? notes,
+    bool? collected,
+    String? collectionPlan,
+    DateTime? dateCollection,
   }) {
     return Order(
       id: id ?? this.id,
@@ -175,6 +187,9 @@ class Order {
       dateLivraisonEffective: dateLivraisonEffective,
       notes: notes ?? this.notes,
       items: items,
+      collected: collected ?? this.collected,
+      collectionPlan: collectionPlan ?? this.collectionPlan,
+      dateCollection: dateCollection ?? this.dateCollection,
     );
   }
 }

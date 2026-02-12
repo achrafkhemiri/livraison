@@ -35,6 +35,9 @@ public class OrderMapper {
                 .dateLivraisonPrevue(order.getDateLivraisonPrevue())
                 .dateLivraisonEffective(order.getDateLivraisonEffective())
                 .notes(order.getNotes())
+                .collected(order.getCollected())
+                .collectionPlan(order.getCollectionPlan())
+                .dateCollection(order.getDateCollection())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt());
         

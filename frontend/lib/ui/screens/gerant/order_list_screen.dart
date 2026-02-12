@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
 import '../../../data/models/models.dart';
+import '../../../data/services/services.dart';
 import '../../../providers/providers.dart';
 
 class OrderListScreen extends StatefulWidget {
@@ -453,68 +454,370 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
   }
 
   Future<void> _showCreateOrderDialog(BuildContext context) async {
-    final clientIdController = TextEditingController();
+    final latController = TextEditingController();
+    final lngController = TextEditingController();
+    final adresseController = TextEditingController();
     final notesController = TextEditingController();
+    
+    // Clients list
+    List<Client> clients = [];
+    Client? selectedClient;
+    bool loadingClients = true;
+
+    // Products with stock from the API
+    List<Map<String, dynamic>> productsStock = [];
+    // Selected items: [{produitId, produitNom, prixHT, quantite}]
+    List<Map<String, dynamic>> selectedItems = [];
+    bool loadingProducts = true;
+
+    // Load clients and products in parallel
+    final orderProvider = context.read<OrderProvider>();
+    final clientService = ClientService();
+    
+    clientService.getAll().then((list) {
+      clients = list;
+      loadingClients = false;
+    }).catchError((_) {
+      loadingClients = false;
+    });
+    
+    orderProvider.loadProductsStock().then((_) {
+      productsStock = orderProvider.productsStock;
+      loadingProducts = false;
+    });
 
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nouvelle commande'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: clientIdController,
-                decoration: AppStyles.inputDecoration(label: 'ID Client *', prefixIcon: Icons.person),
-                keyboardType: TextInputType.number,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          // Refresh loading states
+          if (loadingProducts && orderProvider.productsStock.isNotEmpty) {
+            productsStock = orderProvider.productsStock;
+            loadingProducts = false;
+          }
+          if (loadingClients) {
+            // Trigger rebuild after clients load
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (loadingClients == false) setState(() {});
+            });
+          }
+
+          double totalHT = 0;
+          for (var item in selectedItems) {
+            totalHT += (item['prixHT'] ?? 0.0) * (item['quantite'] ?? 1);
+          }
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.shopping_bag, color: AppColors.primary),
+                const SizedBox(width: 8),
+                const Text('Nouvelle commande'),
+              ],
+            ),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.6,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Section 1: Client info
+                    Text('Informations client', style: AppStyles.headingSmall),
+                    const SizedBox(height: 8),
+                    if (loadingClients)
+                      const Center(child: CircularProgressIndicator())
+                    else
+                      DropdownButtonFormField<Client>(
+                        value: selectedClient,
+                        decoration: AppStyles.inputDecoration(label: 'Client *', prefixIcon: Icons.person),
+                        isExpanded: true,
+                        items: clients.map((client) {
+                          final displayName = client.nom != null && client.nom!.isNotEmpty
+                              ? client.nom!
+                              : client.email ?? 'Client #${client.id}';
+                          return DropdownMenuItem<Client>(
+                            value: client,
+                            child: Text(
+                              '#${client.id} - $displayName',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (client) {
+                          setState(() {
+                            selectedClient = client;
+                            if (client != null) {
+                              latController.text = client.latitude?.toString() ?? '';
+                              lngController.text = client.longitude?.toString() ?? '';
+                              adresseController.text = client.adresse ?? '';
+                            }
+                          });
+                        },
+                      ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: latController,
+                            decoration: AppStyles.inputDecoration(label: 'Latitude', prefixIcon: Icons.location_on),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: lngController,
+                            decoration: AppStyles.inputDecoration(label: 'Longitude', prefixIcon: Icons.location_on),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: adresseController,
+                      decoration: AppStyles.inputDecoration(label: 'Adresse de livraison', prefixIcon: Icons.home),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Section 2: Products
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Produits', style: AppStyles.headingSmall),
+                        if (!loadingProducts)
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              _showProductPicker(context, productsStock, selectedItems, setState);
+                            },
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Ajouter'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (loadingProducts)
+                      const Center(child: CircularProgressIndicator())
+                    else if (selectedItems.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Text('Aucun produit ajouté', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                        ),
+                      )
+                    else
+                      ...selectedItems.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final item = entry.value;
+                        return Card(
+                          child: ListTile(
+                            dense: true,
+                            title: Text(item['produitNom'] ?? 'Produit #${item['produitId']}'),
+                            subtitle: Text('Prix: ${(item['prixHT'] ?? 0.0).toStringAsFixed(2)} TND | Stock total: ${item['totalStock']}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                  onPressed: () {
+                                    setState(() {
+                                      if ((item['quantite'] as int) > 1) {
+                                        item['quantite'] = (item['quantite'] as int) - 1;
+                                      }
+                                    });
+                                  },
+                                ),
+                                Text('${item['quantite']}', style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
+                                IconButton(
+                                  icon: const Icon(Icons.add_circle_outline, size: 20),
+                                  onPressed: () {
+                                    setState(() {
+                                      item['quantite'] = (item['quantite'] as int) + 1;
+                                    });
+                                  },
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.delete_outline, size: 20, color: AppColors.error),
+                                  onPressed: () {
+                                    setState(() {
+                                      selectedItems.removeAt(idx);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    
+                    if (selectedItems.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'Total HT: ${totalHT.toStringAsFixed(2)} TND',
+                          style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ),
+                    ],
+                    
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesController,
+                      decoration: AppStyles.inputDecoration(label: 'Notes', prefixIcon: Icons.note),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesController,
-                decoration: AppStyles.inputDecoration(label: 'Notes', prefixIcon: Icons.note),
-                maxLines: 3,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (selectedClient == null || selectedClient!.id == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Veuillez sélectionner un client'), backgroundColor: AppColors.error),
+                    );
+                    return;
+                  }
+
+                  final clientId = selectedClient!.id!;
+                  final lat = double.tryParse(latController.text);
+                  final lng = double.tryParse(lngController.text);
+
+                  final items = selectedItems.map((item) => OrderItem(
+                    produitId: item['produitId'] as int,
+                    quantite: item['quantite'] as int,
+                  )).toList();
+
+                  final provider = context.read<OrderProvider>();
+                  final order = Order(
+                    clientId: clientId,
+                    latitudeLivraison: lat,
+                    longitudeLivraison: lng,
+                    adresseLivraison: adresseController.text.isEmpty ? null : adresseController.text,
+                    notes: notesController.text.isEmpty ? null : notesController.text,
+                    status: 'pending',
+                    items: items.isNotEmpty ? items : null,
+                  );
+
+                  final success = await provider.createOrder(order);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(success ? 'Commande créée avec ${items.length} produit(s)' : 'Erreur: ${provider.errorMessage}'),
+                        backgroundColor: success ? AppColors.success : AppColors.error,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                child: const Text('Créer', style: TextStyle(color: Colors.white)),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final clientId = int.tryParse(clientIdController.text);
-              if (clientId == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('ID client invalide'), backgroundColor: AppColors.error),
-                );
-                return;
-              }
+          );
+        },
+      ),
+    );
+  }
 
-              final provider = context.read<OrderProvider>();
-              final order = Order(
-                clientId: clientId,
-                notes: notesController.text.isEmpty ? null : notesController.text,
-                status: 'pending',
-              );
+  void _showProductPicker(
+    BuildContext context,
+    List<Map<String, dynamic>> productsStock,
+    List<Map<String, dynamic>> selectedItems,
+    StateSetter parentSetState,
+  ) {
+    final searchController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final query = searchController.text.toLowerCase();
+          final filtered = productsStock.where((p) {
+            final nom = (p['produitNom'] ?? '').toString().toLowerCase();
+            final ref = (p['produitReference'] ?? '').toString().toLowerCase();
+            return nom.contains(query) || ref.contains(query);
+          }).toList();
 
-              final success = await provider.createOrder(order);
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(success ? 'Commande créée' : 'Erreur'),
-                    backgroundColor: success ? AppColors.success : AppColors.error,
+          // Already selected product IDs
+          final selectedIds = selectedItems.map((e) => e['produitId']).toSet();
+
+          return AlertDialog(
+            title: const Text('Sélectionner un produit'),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.5,
+              height: MediaQuery.of(context).size.height * 0.5,
+              child: Column(
+                children: [
+                  TextField(
+                    controller: searchController,
+                    decoration: AppStyles.inputDecoration(label: 'Rechercher...', prefixIcon: Icons.search),
+                    onChanged: (_) => setState(() {}),
                   ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Créer', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(child: Text('Aucun produit disponible', style: AppStyles.bodyMedium))
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final product = filtered[index];
+                              final pid = product['produitId'];
+                              final isSelected = selectedIds.contains(pid);
+                              final totalStock = product['totalStock'];
+                              
+                              return ListTile(
+                                leading: Icon(
+                                  isSelected ? Icons.check_circle : Icons.inventory_2,
+                                  color: isSelected ? AppColors.success : AppColors.primary,
+                                ),
+                                title: Text(product['produitNom'] ?? 'Produit #$pid'),
+                                subtitle: Text('Réf: ${product['produitReference'] ?? 'N/A'} | Prix: ${(product['prixHT'] ?? 0).toStringAsFixed(2)} TND | Stock: $totalStock'),
+                                enabled: !isSelected,
+                                onTap: isSelected ? null : () {
+                                  parentSetState(() {
+                                    selectedItems.add({
+                                      'produitId': pid,
+                                      'produitNom': product['produitNom'],
+                                      'prixHT': (product['prixHT'] ?? 0).toDouble(),
+                                      'totalStock': totalStock,
+                                      'quantite': 1,
+                                    });
+                                  });
+                                  Navigator.pop(context);
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fermer'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

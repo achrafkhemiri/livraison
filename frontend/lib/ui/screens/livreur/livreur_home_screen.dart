@@ -19,7 +19,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _initializeData();
   }
 
@@ -119,7 +119,8 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
           controller: _tabController,
           indicatorColor: Colors.white,
           tabs: const [
-            Tab(text: 'Mes commandes', icon: Icon(Icons.shopping_bag)),
+            Tab(text: 'À collecter', icon: Icon(Icons.inventory_2)),
+            Tab(text: 'À livrer', icon: Icon(Icons.local_shipping)),
             Tab(text: 'Disponibles', icon: Icon(Icons.pending_actions)),
           ],
         ),
@@ -127,7 +128,8 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildMyOrdersTab(),
+          _buildCollectTab(),
+          _buildDeliverTab(),
           _buildPendingOrdersTab(),
         ],
       ),
@@ -151,23 +153,25 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
-  Widget _buildMyOrdersTab() {
+  Widget _buildCollectTab() {
     return Consumer<OrderProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (provider.myOrders.isEmpty) {
+        final toCollect = provider.ordersToCollect;
+
+        if (toCollect.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.inbox_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
+                Icon(Icons.check_circle_outline, size: 64, color: AppColors.success.withOpacity(0.5)),
                 const SizedBox(height: 16),
-                Text('Aucune commande assignée', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
+                Text('Rien à collecter', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
                 const SizedBox(height: 8),
-                Text('Vérifiez les commandes disponibles', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                Text('Tous les articles ont été collectés', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
               ],
             ),
           );
@@ -182,9 +186,160 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
           },
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: provider.myOrders.length,
+            itemCount: toCollect.length,
             itemBuilder: (context, index) {
-              final order = provider.myOrders[index];
+              final order = toCollect[index];
+              return _buildCollectionCard(order, provider);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCollectionCard(Order order, OrderProvider provider) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.inventory_2, color: Colors.orange),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Commande #${order.id}',
+                          style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'À collecter',
+                            style: AppStyles.caption.copyWith(color: Colors.orange, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (order.montantTTC != null)
+                  Text(
+                    '${order.montantTTC!.toStringAsFixed(2)} TND',
+                    style: AppStyles.bodyLarge.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Show items
+            if (order.items != null && order.items!.isNotEmpty) ...[
+              ...order.items!.take(3).map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.circle, size: 6, color: AppColors.textSecondary),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('${item.displayName} x${item.quantite}', style: AppStyles.bodySmall)),
+                  ],
+                ),
+              )),
+              if (order.items!.length > 3)
+                Text('... et ${order.items!.length - 3} autre(s)', style: AppStyles.caption.copyWith(color: AppColors.textSecondary)),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showCollectionPlan(order, provider),
+                    icon: const Icon(Icons.route, size: 18),
+                    label: const Text('Plan de collecte'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _markOrderCollected(order, provider),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Collecté'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeliverTab() {
+    return Consumer<OrderProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final toDeliver = provider.ordersToDeliver;
+
+        if (toDeliver.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inbox_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
+                const SizedBox(height: 16),
+                Text('Rien à livrer', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
+                const SizedBox(height: 8),
+                Text('Collectez d\'abord les articles des dépôts', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            final auth = context.read<AuthProvider>();
+            if (auth.user?.id != null) {
+              await provider.loadOrdersForLivreur(auth.user!.id!);
+            }
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: toDeliver.length,
+            itemBuilder: (context, index) {
+              final order = toDeliver[index];
               return _buildOrderCard(order, provider, isMine: true);
             },
           ),
@@ -406,6 +561,162 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
         ),
       ),
     );
+  }
+
+  Future<void> _showCollectionPlan(Order order, OrderProvider provider) async {
+    // Generate collection plan
+    final plan = await provider.generateCollectionPlan(order.id!);
+    if (!mounted) return;
+
+    if (plan == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur: ${provider.errorMessage}'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final steps = plan['collectionSteps'] as List? ?? [];
+    final totalDepots = plan['totalDepots'] ?? 0;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Icon(Icons.route, color: AppColors.primary, size: 28),
+                  const SizedBox(width: 12),
+                  Text('Plan de collecte', style: AppStyles.headingMedium),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('Commande #${order.id} - $totalDepots dépôt(s) à visiter', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+              const SizedBox(height: 16),
+              if (steps.isEmpty)
+                Center(child: Text('Aucun article à collecter', style: AppStyles.bodyMedium))
+              else
+                ...steps.map((step) {
+                  final stepNum = step['step'];
+                  final depotNom = step['depotNom'] ?? 'Dépôt';
+                  final items = step['items'] as List? ?? [];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: Colors.orange,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text('$stepNum', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(depotNom, style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
+                                  if (step['depotLatitude'] != null)
+                                    Text(
+                                      '${step['depotLatitude']}, ${step['depotLongitude']}',
+                                      style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.warehouse, color: Colors.orange),
+                          ],
+                        ),
+                        const Divider(),
+                        ...items.map((item) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(item['produitNom'] ?? 'Produit', style: AppStyles.bodySmall),
+                              Text('x${item['quantite']}', style: AppStyles.bodySmall.copyWith(fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        )),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _markOrderCollected(Order order, OrderProvider provider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer la collecte'),
+        content: Text('Avez-vous collecté tous les articles de la commande #${order.id} ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Non'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+            child: const Text('Oui, tout collecté', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final success = await provider.markAsCollected(order.id!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Commande marquée comme collectée' : 'Erreur'),
+            backgroundColor: success ? AppColors.success : AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _acceptOrder(Order order, OrderProvider provider) async {

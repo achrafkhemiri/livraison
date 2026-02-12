@@ -8,6 +8,8 @@ class Societe {
   final String? telephone;
   final String? email;
   final bool actif;
+  final double? latitude;
+  final double? longitude;
 
   Societe({
     this.id,
@@ -19,6 +21,8 @@ class Societe {
     this.telephone,
     this.email,
     this.actif = true,
+    this.latitude,
+    this.longitude,
   });
 
   factory Societe.fromJson(Map<String, dynamic> json) {
@@ -32,6 +36,8 @@ class Societe {
       telephone: json['telephone'],
       email: json['email'],
       actif: json['actif'] ?? true,
+      latitude: json['latitude']?.toDouble(),
+      longitude: json['longitude']?.toDouble(),
     );
   }
 
@@ -46,6 +52,8 @@ class Societe {
       'telephone': telephone,
       'email': email,
       'actif': actif,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     };
   }
 
@@ -59,6 +67,8 @@ class Societe {
     String? telephone,
     String? email,
     bool? actif,
+    double? latitude,
+    double? longitude,
   }) {
     return Societe(
       id: id ?? this.id,
@@ -70,6 +80,8 @@ class Societe {
       telephone: telephone ?? this.telephone,
       email: email ?? this.email,
       actif: actif ?? this.actif,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 }

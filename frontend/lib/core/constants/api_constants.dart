@@ -43,4 +43,8 @@ class ApiConstants {
   
   // TVA endpoints
   static const String tva = '/tva';
+  
+  // Map & stock endpoints
+  static const String mapData = '/map-data';
+  static const String productsStock = '/products-stock';
 }

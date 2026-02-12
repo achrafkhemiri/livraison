@@ -14,6 +14,8 @@ public class SocieteMapper {
                 .id(societe.getId())
                 .raisonSociale(societe.getRaisonSociale())
                 .mf(societe.getMf())
+                .latitude(societe.getLatitude())
+                .longitude(societe.getLongitude())
                 .version(societe.getVersion())
                 .createdAt(societe.getCreatedAt())
                 .updatedAt(societe.getUpdatedAt())
@@ -34,5 +36,7 @@ public class SocieteMapper {
     public void updateEntity(Societe societe, SocieteDTO dto) {
         if (dto.getRaisonSociale() != null) societe.setRaisonSociale(dto.getRaisonSociale());
         if (dto.getMf() != null) societe.setMf(dto.getMf());
+        if (dto.getLatitude() != null) societe.setLatitude(dto.getLatitude());
+        if (dto.getLongitude() != null) societe.setLongitude(dto.getLongitude());
     }
 }

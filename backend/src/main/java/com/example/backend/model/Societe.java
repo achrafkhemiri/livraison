@@ -20,7 +20,7 @@ public class Societe {
     private String raisonSociale;
     
     // MF = Matricule Fiscal
-    @Column(name = "mf")
+    @Column(name = "mf", unique = true)
     private String mf;
     
     @Column(name = "created_at")
@@ -29,14 +29,21 @@ public class Societe {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
     
-    @Column(nullable = false)
+    @Column(name = "version", nullable = false)
+    @lombok.Builder.Default
     private Integer version = 1;
     
-    @Column(name = "creationUser")
+    @Column(name = "creation_user")
     private Long creationUser;
-    
-    @Column(name = "editUser")
+
+    @Column(name = "edit_user")
     private Long editUser;
+
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
     
     @PrePersist
     protected void onCreate() {

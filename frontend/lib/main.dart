@@ -20,6 +20,7 @@ import 'ui/screens/gerant/magasin_list_screen.dart';
 import 'ui/screens/gerant/depot_list_screen.dart';
 import 'ui/screens/gerant/livreur_list_screen.dart';
 import 'ui/screens/gerant/order_list_screen.dart';
+import 'ui/screens/gerant/admin_map_screen.dart';
 import 'ui/screens/livreur/livreur_home_screen.dart';
 import 'ui/screens/livreur/delivery_map_screen.dart';
 
@@ -172,7 +173,7 @@ class SmartDeliveryApp extends StatelessWidget {
       '/gerant/depots': (context) => const DepotListScreen(),
       '/gerant/livreurs': (context) => const LivreurListScreen(),
       '/gerant/orders': (context) => const OrderListScreen(),
-      '/gerant/map': (context) => const DeliveryMapScreen(),
+      '/gerant/map': (context) => const AdminMapScreen(),
       
       // Livreur routes
       '/livreur/home': (context) => const LivreurHomeScreen(),

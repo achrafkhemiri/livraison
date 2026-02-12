@@ -84,6 +84,10 @@ public class OrderController {
     @PostMapping
     @PreAuthorize("hasRole('GERANT')")
     public ResponseEntity<OrderDTO> create(@Valid @RequestBody OrderDTO orderDTO) {
+        // Set societeId from current user if not provided
+        if (orderDTO.getSocieteId() == null) {
+            orderDTO.setSocieteId(securityService.getCurrentUserSocieteId());
+        }
         OrderDTO created = orderService.create(orderDTO);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }

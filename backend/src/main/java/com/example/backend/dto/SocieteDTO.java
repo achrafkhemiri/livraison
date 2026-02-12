@@ -15,6 +15,8 @@ public class SocieteDTO {
     private String raisonSociale;
     
     private String mf; // Matricule Fiscal
+    private Double latitude;
+    private Double longitude;
     private Integer version;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

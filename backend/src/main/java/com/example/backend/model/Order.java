@@ -95,6 +95,16 @@ public class Order {
     
     private String notes;
     
+    // Collection fields
+    @Column(name = "collected")
+    private Boolean collected;
+    
+    @Column(name = "collection_plan", columnDefinition = "LONGTEXT")
+    private String collectionPlan;
+    
+    @Column(name = "date_collection")
+    private LocalDateTime dateCollection;
+    
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();

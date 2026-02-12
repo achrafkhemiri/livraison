@@ -134,11 +134,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, HttpServletRequest request) {
         
+        // Build detailed message for debugging
+        String detail = ex.getClass().getSimpleName() + ": " + ex.getMessage();
+        if (ex.getCause() != null) {
+            detail += " | Cause: " + ex.getCause().getClass().getSimpleName() + ": " + ex.getCause().getMessage();
+        }
+        
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .error("Internal Server Error")
-                .message("Une erreur interne s'est produite")
+                .message(detail)
                 .path(request.getRequestURI())
                 .build();
         

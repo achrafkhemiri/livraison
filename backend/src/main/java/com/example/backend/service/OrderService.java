@@ -17,5 +17,6 @@ public interface OrderService {
     OrderDTO update(Long id, OrderDTO orderDTO);
     OrderDTO updateStatus(Long id, String status);
     OrderDTO assignLivreur(Long orderId, Long livreurId);
+    OrderDTO markAsCollected(Long orderId);
     void delete(Long id);
 }

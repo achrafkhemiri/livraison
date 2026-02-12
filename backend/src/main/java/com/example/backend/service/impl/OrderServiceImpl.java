@@ -154,6 +154,7 @@ public class OrderServiceImpl implements OrderService {
         }
         
         order.setStatus("pending");
+        order.setSocieteId(orderDTO.getSocieteId());
         order.setAdresseLivraison(orderDTO.getAdresseLivraison());
         order.setLatitudeLivraison(orderDTO.getLatitudeLivraison());
         order.setLongitudeLivraison(orderDTO.getLongitudeLivraison());
@@ -244,17 +245,30 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.deleteById(id);
     }
     
+    @Override
+    public OrderDTO markAsCollected(Long orderId) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Commande", "id", orderId));
+        order.setCollected(true);
+        order.setDateCollection(LocalDateTime.now());
+        order = orderRepository.save(order);
+        return orderMapper.toDTO(order);
+    }
+    
     private void addOrderItem(Order order, OrderItemDTO itemDTO) {
         Produit produit = produitRepository.findById(itemDTO.getProduitId())
                 .orElseThrow(() -> new ResourceNotFoundException("Produit", "id", itemDTO.getProduitId()));
+        
+        BigDecimal price = produit.getPriceUht() != null ? produit.getPriceUht() : BigDecimal.ZERO;
         
         OrderItem item = OrderItem.builder()
                 .order(order)
                 .produit(produit)
                 .quantity(itemDTO.getQuantite())
-                .priceUht(produit.getPriceUht())
-                .prixUnitaireHT(produit.getPriceUht())
+                .priceUht(price)
+                .prixUnitaireHT(price)
                 .remise(itemDTO.getRemise() != null ? itemDTO.getRemise() : BigDecimal.ZERO)
+                .version(1)
                 .build();
         
         // Set TVA rate - default to 0 if not available
@@ -267,12 +281,14 @@ public class OrderServiceImpl implements OrderService {
     private void calculateItemTotals(OrderItem item) {
         BigDecimal quantity = BigDecimal.valueOf(item.getActualQuantity());
         BigDecimal remise = item.getRemise() != null ? item.getRemise() : BigDecimal.ZERO;
+        BigDecimal prixHT = item.getPrixUnitaireHT() != null ? item.getPrixUnitaireHT() : BigDecimal.ZERO;
+        BigDecimal tva = item.getTauxTva() != null ? item.getTauxTva() : BigDecimal.ZERO;
         
-        BigDecimal montantHT = item.getPrixUnitaireHT().multiply(quantity);
+        BigDecimal montantHT = prixHT.multiply(quantity);
         montantHT = montantHT.subtract(montantHT.multiply(remise.divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)));
         item.setMontantHT(montantHT.setScale(2, RoundingMode.HALF_UP));
         
-        BigDecimal montantTVA = montantHT.multiply(item.getTauxTva().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
+        BigDecimal montantTVA = montantHT.multiply(tva.divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
         item.setMontantTVA(montantTVA.setScale(2, RoundingMode.HALF_UP));
         
         item.setMontantTTC(montantHT.add(montantTVA).setScale(2, RoundingMode.HALF_UP));

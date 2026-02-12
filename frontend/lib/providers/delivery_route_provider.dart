@@ -22,12 +22,55 @@ class DeliveryStop {
   });
 }
 
+/// Represents a collection stop at a depot
+class CollectionStop {
+  final int orderId;
+  final String depotName;
+  final LatLng position;
+  final List<CollectionItem> items;
+  final Order order;
+  bool isCollected;
+  
+  CollectionStop({
+    required this.orderId,
+    required this.depotName,
+    required this.position,
+    required this.items,
+    required this.order,
+    this.isCollected = false,
+  });
+}
+
+/// Represents an item to collect at a depot
+class CollectionItem {
+  final String name;
+  final int quantity;
+  
+  CollectionItem({required this.name, required this.quantity});
+}
+
+/// The active mode in the map: collect from depots or deliver to clients
+enum MapMode { collect, deliver }
+
 /// Provider for managing delivery routes and optimization
 class DeliveryRouteProvider extends ChangeNotifier {
   final ClientService _clientService = ClientService();
   
+  // Current mode
+  MapMode _mapMode = MapMode.collect;
+  
+  // Delivery stops (clients)
   List<DeliveryStop> _stops = [];
   Set<int> _selectedStopIds = {}; // Selected stops for delivery
+  
+  // Collection stops (depots)
+  List<CollectionStop> _collectionStops = [];
+  Set<int> _selectedCollectionIds = {}; // Selected collection stops (by orderId)
+  List<LatLng> _collectionRoutePoints = [];
+  double _collectionDistance = 0;
+  double _collectionDuration = 0;
+  bool _usedOsrmGeometryCollection = false;
+  
   List<LatLng> _routePoints = [];
   LatLng? _startPosition;
   double _totalDistance = 0;
@@ -38,6 +81,10 @@ class DeliveryRouteProvider extends ChangeNotifier {
   String? _errorMessage;
   int _currentStopIndex = 0;
   
+  // Mode
+  MapMode get mapMode => _mapMode;
+  
+  // Delivery getters
   List<DeliveryStop> get stops => _stops;
   Set<int> get selectedStopIds => _selectedStopIds;
   List<DeliveryStop> get selectedStops => _stops.where((s) => _selectedStopIds.contains(s.id)).toList();
@@ -51,6 +98,33 @@ class DeliveryRouteProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   int get currentStopIndex => _currentStopIndex;
   
+  // Collection getters
+  List<CollectionStop> get collectionStops => _collectionStops;
+  Set<int> get selectedCollectionIds => _selectedCollectionIds;
+  List<CollectionStop> get selectedCollectionStops => _collectionStops.where((s) => _selectedCollectionIds.contains(s.orderId)).toList();
+  List<LatLng> get collectionRoutePoints => _collectionRoutePoints;
+  double get collectionDistance => _collectionDistance;
+  double get collectionDuration => _collectionDuration;
+  bool get usedOsrmGeometryCollection => _usedOsrmGeometryCollection;
+  
+  // Formatted collection distance
+  String get formattedCollectionDistance {
+    if (_collectionDistance >= 1000) {
+      return '${(_collectionDistance / 1000).toStringAsFixed(1)} km';
+    }
+    return '${_collectionDistance.toStringAsFixed(0)} m';
+  }
+  
+  // Formatted collection duration
+  String get formattedCollectionDuration {
+    final hours = (_collectionDuration / 3600).floor();
+    final minutes = ((_collectionDuration % 3600) / 60).floor();
+    if (hours > 0) {
+      return '${hours}h ${minutes}min';
+    }
+    return '${minutes} min';
+  }
+
   // Formatted distance
   String get formattedDistance {
     if (_totalDistance >= 1000) {
@@ -527,6 +601,277 @@ class DeliveryRouteProvider extends ChangeNotifier {
     notifyListeners();
   }
   
+  // Switch map mode
+  void setMapMode(MapMode mode) {
+    _mapMode = mode;
+    notifyListeners();
+  }
+  
+  // Initialize collection stops from orders (depot-based)
+  Future<void> initializeCollectionStops(List<Order> orders, OrderService orderService) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _collectionStops = [];
+    notifyListeners();
+    
+    try {
+      for (final order in orders) {
+        if (order.collected == true) continue; // Skip already collected
+        
+        // Generate collection plan for each order
+        try {
+          final plan = await orderService.generateCollectionPlan(order.id!);
+          if (plan != null) {
+            final steps = plan['collectionSteps'] as List? ?? [];
+            for (final step in steps) {
+              final lat = step['depotLatitude'];
+              final lon = step['depotLongitude'];
+              if (lat != null && lon != null) {
+                final items = (step['items'] as List? ?? []).map((item) => CollectionItem(
+                  name: item['produitNom'] ?? 'Produit',
+                  quantity: item['quantite'] ?? 0,
+                )).toList();
+                
+                // Check if we already have a stop for this order (merge depot steps)
+                final existingIdx = _collectionStops.indexWhere((s) => s.orderId == order.id);
+                if (existingIdx >= 0) {
+                  _collectionStops[existingIdx].items.addAll(items);
+                } else {
+                  _collectionStops.add(CollectionStop(
+                    orderId: order.id!,
+                    depotName: step['depotNom'] ?? 'Dépôt',
+                    position: LatLng(
+                      (lat as num).toDouble(),
+                      (lon as num).toDouble(),
+                    ),
+                    items: items,
+                    order: order,
+                  ));
+                }
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Failed to generate collection plan for order ${order.id}: $e');
+        }
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  // Toggle collection stop selection
+  void toggleCollectionSelection(int orderId) {
+    if (_selectedCollectionIds.contains(orderId)) {
+      _selectedCollectionIds.remove(orderId);
+    } else {
+      _selectedCollectionIds.add(orderId);
+    }
+    notifyListeners();
+  }
+  
+  // Select all collection stops
+  void selectAllCollectionStops() {
+    _selectedCollectionIds = _collectionStops.map((s) => s.orderId).toSet();
+    notifyListeners();
+  }
+  
+  // Deselect all collection stops
+  void deselectAllCollectionStops() {
+    _selectedCollectionIds.clear();
+    _collectionRoutePoints.clear();
+    _collectionDistance = 0;
+    _collectionDuration = 0;
+    notifyListeners();
+  }
+  
+  // Calculate optimized collection route (depot visits)
+  Future<void> calculateCollectionRoute() async {
+    final stopsToRoute = selectedCollectionStops;
+    
+    if (_startPosition == null || stopsToRoute.isEmpty) {
+      _errorMessage = 'Position de départ ou dépôts manquants';
+      notifyListeners();
+      return;
+    }
+    
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    
+    try {
+      await checkOsrmConnection();
+      
+      final positions = stopsToRoute.map((s) => s.position).toList();
+      
+      if (_isOsrmAvailable && stopsToRoute.length > 1) {
+        final allPositions = [_startPosition!, ...positions];
+        final matrix = await OsrmService.getDistanceMatrix(allPositions);
+        
+        if (matrix != null) {
+          // Nearest neighbor on depot stops
+          final optimized = _optimizeCollectionWithMatrix(stopsToRoute, matrix);
+          _reorderCollectionStops(optimized);
+        } else {
+          final optimized = _optimizeCollectionWithHaversine(stopsToRoute);
+          _reorderCollectionStops(optimized);
+        }
+      } else if (stopsToRoute.length > 1) {
+        final optimized = _optimizeCollectionWithHaversine(stopsToRoute);
+        _reorderCollectionStops(optimized);
+      }
+      
+      // Calculate route
+      await _calculateCollectionRoute();
+      
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  void _reorderCollectionStops(List<CollectionStop> optimized) {
+    final optimizedIds = optimized.map((s) => s.orderId).toSet();
+    final unselected = _collectionStops.where((s) => !optimizedIds.contains(s.orderId)).toList();
+    _collectionStops = [...optimized, ...unselected];
+  }
+  
+  List<CollectionStop> _optimizeCollectionWithMatrix(List<CollectionStop> stops, List<List<double>> matrix) {
+    final n = stops.length;
+    if (n <= 1) return stops;
+    
+    final visited = List.filled(n, false);
+    final optimized = <CollectionStop>[];
+    int current = 0;
+    
+    for (int i = 0; i < n; i++) {
+      double minDist = double.infinity;
+      int nearest = -1;
+      
+      for (int j = 0; j < n; j++) {
+        if (!visited[j]) {
+          final distance = matrix[current][j + 1];
+          if (distance < minDist) {
+            minDist = distance;
+            nearest = j;
+          }
+        }
+      }
+      
+      if (nearest != -1) {
+        visited[nearest] = true;
+        optimized.add(stops[nearest]);
+        current = nearest + 1;
+      }
+    }
+    
+    return optimized;
+  }
+  
+  List<CollectionStop> _optimizeCollectionWithHaversine(List<CollectionStop> stops) {
+    final n = stops.length;
+    if (n <= 1) return stops;
+    
+    final visited = List.filled(n, false);
+    final optimized = <CollectionStop>[];
+    LatLng current = _startPosition!;
+    
+    for (int i = 0; i < n; i++) {
+      double minDist = double.infinity;
+      int nearest = -1;
+      
+      for (int j = 0; j < n; j++) {
+        if (!visited[j]) {
+          final distance = OsrmService.haversineDistance(
+            current.latitude, current.longitude,
+            stops[j].position.latitude, stops[j].position.longitude,
+          );
+          if (distance < minDist) {
+            minDist = distance;
+            nearest = j;
+          }
+        }
+      }
+      
+      if (nearest != -1) {
+        visited[nearest] = true;
+        optimized.add(stops[nearest]);
+        current = stops[nearest].position;
+      }
+    }
+    
+    return optimized;
+  }
+  
+  Future<void> _calculateCollectionRoute() async {
+    final stopsToRoute = selectedCollectionStops;
+    if (_startPosition == null || stopsToRoute.isEmpty) return;
+    
+    _collectionRoutePoints = [];
+    _collectionDistance = 0;
+    _collectionDuration = 0;
+    _usedOsrmGeometryCollection = false;
+    
+    final waypoints = [_startPosition!, ...stopsToRoute.map((s) => s.position)];
+    
+    if (_isOsrmAvailable) {
+      final route = await OsrmService.getRoute(waypoints);
+      if (route != null && route.geometry.length > 2) {
+        _collectionRoutePoints = route.geometry;
+        _collectionDistance = route.distance * 1000;
+        _collectionDuration = route.duration * 60;
+        _usedOsrmGeometryCollection = true;
+      } else {
+        _collectionRoutePoints = _interpolateRoute(waypoints);
+        if (route != null) {
+          _collectionDistance = route.distance * 1000;
+          _collectionDuration = route.duration * 60;
+        } else {
+          _calculateFallbackCollectionMetrics(waypoints);
+        }
+      }
+    } else {
+      _collectionRoutePoints = _interpolateRoute(waypoints);
+      _calculateFallbackCollectionMetrics(waypoints);
+    }
+    
+    notifyListeners();
+  }
+  
+  void _calculateFallbackCollectionMetrics(List<LatLng> waypoints) {
+    _collectionDistance = 0;
+    for (int i = 0; i < waypoints.length - 1; i++) {
+      _collectionDistance += OsrmService.haversineDistance(
+        waypoints[i].latitude, waypoints[i].longitude,
+        waypoints[i + 1].latitude, waypoints[i + 1].longitude,
+      ) * 1000;
+    }
+    _collectionDuration = (_collectionDistance / 1000) / 30 * 3600;
+  }
+  
+  // Mark a collection stop as collected and move to delivery
+  void markCollectionStopCollected(int orderId) {
+    final idx = _collectionStops.indexWhere((s) => s.orderId == orderId);
+    if (idx != -1) {
+      _collectionStops[idx].isCollected = true;
+      notifyListeners();
+    }
+  }
+  
+  // Clear collection route path
+  void clearCollectionRoute() {
+    _collectionRoutePoints = [];
+    _collectionDistance = 0;
+    _collectionDuration = 0;
+    _usedOsrmGeometryCollection = false;
+    notifyListeners();
+  }
+
   void clearError() {
     _errorMessage = null;
     notifyListeners();

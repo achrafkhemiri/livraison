@@ -63,4 +63,30 @@ class OrderService {
   Future<void> delete(int id) async {
     await _api.delete('${ApiConstants.orders}/$id');
   }
+
+  // ===== Map & Collection endpoints =====
+
+  /// Get map data (société, magasins, depots, livreurs markers)
+  Future<Map<String, dynamic>> getMapData() async {
+    final response = await _api.get(ApiConstants.mapData);
+    return response as Map<String, dynamic>;
+  }
+
+  /// Get products with stock grouped by depot for the admin's société
+  Future<List<Map<String, dynamic>>> getProductsStock() async {
+    final response = await _api.get(ApiConstants.productsStock);
+    return (response as List).map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  /// Generate collection plan for an order
+  Future<Map<String, dynamic>> generateCollectionPlan(int orderId) async {
+    final response = await _api.post('${ApiConstants.orders}/$orderId/collection-plan', {});
+    return response as Map<String, dynamic>;
+  }
+
+  /// Mark order as collected (all items picked up from depots)
+  Future<Order> markAsCollected(int orderId) async {
+    final response = await _api.patch('${ApiConstants.orders}/$orderId/collected');
+    return Order.fromJson(response);
+  }
 }

@@ -11,6 +11,11 @@ class OrderProvider extends ChangeNotifier {
   Order? _selectedOrder;
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Map data
+  Map<String, dynamic>? _mapData;
+  List<Map<String, dynamic>> _productsStock = [];
+  Map<String, dynamic>? _collectionPlan;
   
   List<Order> get orders => _orders;
   List<Order> get pendingOrders => _pendingOrders;
@@ -18,6 +23,9 @@ class OrderProvider extends ChangeNotifier {
   Order? get selectedOrder => _selectedOrder;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  Map<String, dynamic>? get mapData => _mapData;
+  List<Map<String, dynamic>> get productsStock => _productsStock;
+  Map<String, dynamic>? get collectionPlan => _collectionPlan;
   
   // Statistics
   int get totalOrders => _orders.length;
@@ -276,5 +284,68 @@ class OrderProvider extends ChangeNotifier {
     return _myOrders.where((o) => 
       o.status != 'delivered' && o.status != 'cancelled' && o.status != 'done'
     ).toList();
+  }
+
+  // Orders to collect (assigned but not yet collected)
+  List<Order> get ordersToCollect {
+    return _myOrders.where((o) => 
+      o.collected != true && o.status != 'delivered' && o.status != 'cancelled' && o.status != 'done'
+    ).toList();
+  }
+
+  // Orders ready to deliver (collected but not yet delivered)
+  List<Order> get ordersToDeliver {
+    return _myOrders.where((o) => 
+      o.collected == true && o.status != 'delivered' && o.status != 'cancelled' && o.status != 'done'
+    ).toList();
+  }
+
+  // Load map data (société, magasins, depots, livreurs)
+  Future<void> loadMapData() async {
+    try {
+      _mapData = await _service.getMapData();
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // Load products with stock by société
+  Future<void> loadProductsStock() async {
+    try {
+      _productsStock = await _service.getProductsStock();
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // Generate collection plan for an order
+  Future<Map<String, dynamic>?> generateCollectionPlan(int orderId) async {
+    try {
+      _collectionPlan = await _service.generateCollectionPlan(orderId);
+      notifyListeners();
+      return _collectionPlan;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  // Mark order as collected
+  Future<bool> markAsCollected(int orderId) async {
+    try {
+      final updated = await _service.markAsCollected(orderId);
+      _updateOrderInLists(orderId, updated);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 }

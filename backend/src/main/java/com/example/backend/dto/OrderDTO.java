@@ -48,4 +48,9 @@ public class OrderDTO {
     private List<OrderItemDTO> items;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    
+    // Collection fields
+    private Boolean collected;
+    private String collectionPlan;
+    private LocalDateTime dateCollection;
 }
