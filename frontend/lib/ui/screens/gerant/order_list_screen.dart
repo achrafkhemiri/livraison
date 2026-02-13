@@ -470,37 +470,25 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
     List<Map<String, dynamic>> selectedItems = [];
     bool loadingProducts = true;
 
-    // Load clients and products in parallel
+    // Load clients and products BEFORE showing dialog to avoid display issues
     final orderProvider = context.read<OrderProvider>();
     final clientService = ClientService();
     
-    clientService.getAll().then((list) {
-      clients = list;
-      loadingClients = false;
-    }).catchError((_) {
-      loadingClients = false;
-    });
+    try {
+      clients = await clientService.getAll();
+    } catch (_) {}
+    loadingClients = false;
     
-    orderProvider.loadProductsStock().then((_) {
-      productsStock = orderProvider.productsStock;
-      loadingProducts = false;
-    });
+    await orderProvider.loadProductsStock();
+    productsStock = orderProvider.productsStock;
+    loadingProducts = false;
+
+    if (!mounted) return;
 
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          // Refresh loading states
-          if (loadingProducts && orderProvider.productsStock.isNotEmpty) {
-            productsStock = orderProvider.productsStock;
-            loadingProducts = false;
-          }
-          if (loadingClients) {
-            // Trigger rebuild after clients load
-            Future.delayed(const Duration(milliseconds: 300), () {
-              if (loadingClients == false) setState(() {});
-            });
-          }
 
           double totalHT = 0;
           for (var item in selectedItems) {

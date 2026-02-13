@@ -24,7 +24,9 @@ class DeliveryStop {
 
 /// Represents a collection stop at a depot
 class CollectionStop {
+  final int id; // unique stop ID (orderId * 1000 + stepIndex)
   final int orderId;
+  final int stepIndex;
   final String depotName;
   final LatLng position;
   final List<CollectionItem> items;
@@ -32,7 +34,9 @@ class CollectionStop {
   bool isCollected;
   
   CollectionStop({
+    required this.id,
     required this.orderId,
+    required this.stepIndex,
     required this.depotName,
     required this.position,
     required this.items,
@@ -251,7 +255,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
   // Check if stop is selected
   bool isStopSelected(int orderId) => _selectedStopIds.contains(orderId);
   
-  // Calculate optimized route using nearest neighbor algorithm
+  // Calculate optimized route using OSRM /trip + 2-opt + or-opt
   Future<void> calculateOptimizedRoute() async {
     // Use only selected stops for route calculation
     final stopsToRoute = selectedStops;
@@ -270,30 +274,65 @@ class DeliveryRouteProvider extends ChangeNotifier {
       // Check OSRM availability
       await checkOsrmConnection();
       
+      final allPositions = [_startPosition!, ...stopsToRoute.map((s) => s.position)];
+      
       if (_isOsrmAvailable && stopsToRoute.length > 1) {
-        // Get distance matrix from OSRM
-        final allPositions = [_startPosition!, ...stopsToRoute.map((s) => s.position)];
+        // ── Step 1: Try OSRM /trip for initial TSP-optimized order ──
+        final tripResult = await OsrmService.getTrip(allPositions);
+
+        // ── Step 2: Get distance matrix for local search improvements ──
         final matrix = await OsrmService.getDistanceMatrix(allPositions);
-        
-        if (matrix != null) {
-          // Apply nearest neighbor algorithm to selected stops only
-          final optimized = _optimizeStopsWithMatrix(stopsToRoute, matrix);
-          // Reorder the selected stops based on optimization
+
+        if (tripResult != null && matrix != null) {
+          // Build initial tour from trip waypoint order
+          List<int> tour = List<int>.from(tripResult.waypointOrder);
+          // Ensure depot (0) is first
+          if (tour.isNotEmpty && tour[0] != 0) {
+            tour.remove(0);
+            tour.insert(0, 0);
+          }
+          debugPrint('OSRM /trip initial tour: $tour');
+
+          // ── Step 3: Apply 2-opt improvement ──
+          tour = _improve2Opt(tour, matrix);
+
+          // ── Step 4: Apply or-opt improvement ──
+          tour = _improveOrOpt(tour, matrix);
+
+          debugPrint('Final optimized tour: $tour');
+
+          // Reorder stops based on final optimized tour
+          final optimized = _applyTourOrder(stopsToRoute, tour);
+          _reorderSelectedStops(optimized);
+        } else if (matrix != null) {
+          // /trip failed but we have the matrix: nearest neighbor + 2-opt + or-opt
+          debugPrint('OSRM /trip unavailable, using matrix + local search');
+          final nnOrder = _optimizeStopsWithMatrix(stopsToRoute, matrix);
+          _reorderSelectedStops(nnOrder);
+
+          // Build tour indices from nearest-neighbor order
+          List<int> tour = [0, ...List.generate(nnOrder.length, (i) {
+            final pos = stopsToRoute.indexOf(nnOrder[i]);
+            return pos + 1; // +1 for depot offset
+          })];
+          tour = _improve2Opt(tour, matrix);
+          tour = _improveOrOpt(tour, matrix);
+          final optimized = _applyTourOrder(stopsToRoute, tour);
           _reorderSelectedStops(optimized);
         } else {
-          // Fall back to haversine-based optimization
+          // No OSRM matrix available: haversine nearest neighbor only
           final optimized = _optimizeStopsWithHaversine(stopsToRoute);
           _reorderSelectedStops(optimized);
         }
       } else if (stopsToRoute.length == 1) {
         // Only one stop, no optimization needed
       } else {
-        // Use haversine distance for optimization
+        // OSRM not available: haversine-based optimization
         final optimized = _optimizeStopsWithHaversine(stopsToRoute);
         _reorderSelectedStops(optimized);
       }
       
-      // Calculate route between all selected points
+      // Calculate route geometry between all optimized points
       await _calculateRoute();
       
     } catch (e) {
@@ -600,6 +639,109 @@ class DeliveryRouteProvider extends ChangeNotifier {
     _usedOsrmGeometry = false;
     notifyListeners();
   }
+
+  // ====== TSP Local Search Improvements ======
+
+  /// Compute total tour distance from a distance matrix.
+  /// [tour] is the ordered list of matrix indices to visit.
+  double _tourDistanceFromMatrix(List<int> tour, List<List<double>> matrix) {
+    double total = 0;
+    for (int i = 0; i < tour.length - 1; i++) {
+      total += matrix[tour[i]][tour[i + 1]];
+    }
+    return total;
+  }
+
+  /// 2-opt improvement: iteratively reverse segments to shorten the tour.
+  /// [tour] is a list of matrix indices (0 = depot, 1..n = stops).
+  /// The first element (depot) is kept fixed.
+  List<int> _improve2Opt(List<int> tour, List<List<double>> matrix) {
+    if (tour.length < 4) return tour; // Need at least depot + 3 stops
+    bool improved = true;
+    List<int> best = List.from(tour);
+    double bestDist = _tourDistanceFromMatrix(best, matrix);
+    int maxIterations = 100; // prevent infinite loops
+
+    while (improved && maxIterations-- > 0) {
+      improved = false;
+      // Start from 1 to keep depot fixed at position 0
+      for (int i = 1; i < best.length - 2; i++) {
+        for (int j = i + 1; j < best.length; j++) {
+          // Reverse the segment between i and j
+          final candidate = List<int>.from(best);
+          final segment = candidate.sublist(i, j + 1).reversed.toList();
+          candidate.replaceRange(i, j + 1, segment);
+
+          final candidateDist = _tourDistanceFromMatrix(candidate, matrix);
+          if (candidateDist < bestDist - 0.0001) {
+            best = candidate;
+            bestDist = candidateDist;
+            improved = true;
+          }
+        }
+      }
+    }
+    debugPrint('2-opt: distance ${_tourDistanceFromMatrix(tour, matrix).toStringAsFixed(2)} -> ${bestDist.toStringAsFixed(2)} km');
+    return best;
+  }
+
+  /// Or-opt improvement: relocate a single node or a pair of consecutive nodes
+  /// to a better position in the tour.
+  /// The first element (depot) is kept fixed.
+  List<int> _improveOrOpt(List<int> tour, List<List<double>> matrix) {
+    if (tour.length < 4) return tour;
+    bool improved = true;
+    List<int> best = List.from(tour);
+    double bestDist = _tourDistanceFromMatrix(best, matrix);
+    int maxIterations = 100;
+
+    while (improved && maxIterations-- > 0) {
+      improved = false;
+      // Try segment sizes 1 and 2
+      for (int segLen = 1; segLen <= 2; segLen++) {
+        // Start from 1 to keep depot fixed
+        for (int i = 1; i <= best.length - segLen; i++) {
+          // Extract the segment
+          final segment = best.sublist(i, i + segLen);
+          final remaining = [...best.sublist(0, i), ...best.sublist(i + segLen)];
+
+          // Try inserting the segment at every other position (after depot)
+          for (int j = 1; j < remaining.length; j++) {
+            if (j == i) continue; // Same position
+            final candidate = [
+              ...remaining.sublist(0, j),
+              ...segment,
+              ...remaining.sublist(j),
+            ];
+
+            final candidateDist = _tourDistanceFromMatrix(candidate, matrix);
+            if (candidateDist < bestDist - 0.0001) {
+              best = candidate;
+              bestDist = candidateDist;
+              improved = true;
+              break; // Restart outer loop with new best
+            }
+          }
+          if (improved) break;
+        }
+        if (improved) break;
+      }
+    }
+    debugPrint('Or-opt: distance -> ${bestDist.toStringAsFixed(2)} km');
+    return best;
+  }
+
+  /// Reorder a list of DeliveryStops based on an optimized tour of matrix indices.
+  /// [tour] contains matrix indices where 0 = depot, 1..n = stops[0..n-1].
+  List<DeliveryStop> _applyTourOrder(List<DeliveryStop> stops, List<int> tour) {
+    // tour[0] is the depot (skip it), tour[1..] are the stop indices (+1 offset)
+    return tour.where((idx) => idx > 0).map((idx) => stops[idx - 1]).toList();
+  }
+
+  /// Reorder a list of CollectionStops based on an optimized tour of matrix indices.
+  List<CollectionStop> _applyCollectionTourOrder(List<CollectionStop> stops, List<int> tour) {
+    return tour.where((idx) => idx > 0).map((idx) => stops[idx - 1]).toList();
+  }
   
   // Switch map mode
   void setMapMode(MapMode mode) {
@@ -615,46 +757,56 @@ class DeliveryRouteProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      for (final order in orders) {
-        if (order.collected == true) continue; // Skip already collected
-        
-        // Generate collection plan for each order
+      // Load collection plans in parallel for speed
+      final validOrders = orders.where((o) => o.collected != true && o.id != null).toList();
+      
+      final futures = validOrders.map((order) async {
         try {
           final plan = await orderService.generateCollectionPlan(order.id!);
-          if (plan != null) {
-            final steps = plan['collectionSteps'] as List? ?? [];
-            for (final step in steps) {
-              final lat = step['depotLatitude'];
-              final lon = step['depotLongitude'];
-              if (lat != null && lon != null) {
-                final items = (step['items'] as List? ?? []).map((item) => CollectionItem(
-                  name: item['produitNom'] ?? 'Produit',
-                  quantity: item['quantite'] ?? 0,
-                )).toList();
-                
-                // Check if we already have a stop for this order (merge depot steps)
-                final existingIdx = _collectionStops.indexWhere((s) => s.orderId == order.id);
-                if (existingIdx >= 0) {
-                  _collectionStops[existingIdx].items.addAll(items);
-                } else {
-                  _collectionStops.add(CollectionStop(
-                    orderId: order.id!,
-                    depotName: step['depotNom'] ?? 'Dépôt',
-                    position: LatLng(
-                      (lat as num).toDouble(),
-                      (lon as num).toDouble(),
-                    ),
-                    items: items,
-                    order: order,
-                  ));
-                }
-              }
+          return MapEntry(order, plan);
+        } catch (e) {
+          debugPrint('Failed to generate collection plan for order ${order.id}: \$e');
+          return MapEntry(order, null);
+        }
+      }).toList();
+      
+      final results = await Future.wait(futures);
+      
+      for (final entry in results) {
+        final order = entry.key;
+        final plan = entry.value;
+        if (plan != null) {
+          final steps = plan['collectionSteps'] as List? ?? [];
+          // Create a SEPARATE stop for each depot step (don't merge)
+          for (int stepIdx = 0; stepIdx < steps.length; stepIdx++) {
+            final step = steps[stepIdx];
+            final lat = step['depotLatitude'];
+            final lon = step['depotLongitude'];
+            if (lat != null && lon != null) {
+              final items = (step['items'] as List? ?? []).map((item) => CollectionItem(
+                name: item['produitNom'] ?? 'Produit',
+                quantity: item['quantite'] ?? 0,
+              )).toList();
+              
+              _collectionStops.add(CollectionStop(
+                id: order.id! * 1000 + stepIdx,
+                orderId: order.id!,
+                stepIndex: stepIdx,
+                depotName: step['depotNom'] ?? 'Dépôt ${stepIdx + 1}',
+                position: LatLng(
+                  (lat as num).toDouble(),
+                  (lon as num).toDouble(),
+                ),
+                items: items,
+                order: order,
+              ));
             }
           }
-        } catch (e) {
-          debugPrint('Failed to generate collection plan for order ${order.id}: $e');
         }
       }
+      
+      // Auto-select all orders
+      _selectedCollectionIds = _collectionStops.map((s) => s.orderId).toSet();
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -688,7 +840,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  // Calculate optimized collection route (depot visits)
+  // Calculate optimized collection route using OSRM /trip + 2-opt + or-opt
   Future<void> calculateCollectionRoute() async {
     final stopsToRoute = selectedCollectionStops;
     
@@ -706,14 +858,43 @@ class DeliveryRouteProvider extends ChangeNotifier {
       await checkOsrmConnection();
       
       final positions = stopsToRoute.map((s) => s.position).toList();
+      final allPositions = [_startPosition!, ...positions];
       
       if (_isOsrmAvailable && stopsToRoute.length > 1) {
-        final allPositions = [_startPosition!, ...positions];
+        // ── Step 1: Try OSRM /trip for initial TSP order ──
+        final tripResult = await OsrmService.getTrip(allPositions);
+
+        // ── Step 2: Get distance matrix for 2-opt / or-opt ──
         final matrix = await OsrmService.getDistanceMatrix(allPositions);
-        
-        if (matrix != null) {
-          // Nearest neighbor on depot stops
-          final optimized = _optimizeCollectionWithMatrix(stopsToRoute, matrix);
+
+        if (tripResult != null && matrix != null) {
+          List<int> tour = List<int>.from(tripResult.waypointOrder);
+          if (tour.isNotEmpty && tour[0] != 0) {
+            tour.remove(0);
+            tour.insert(0, 0);
+          }
+          debugPrint('Collection /trip initial tour: $tour');
+
+          // ── Step 3: 2-opt ──
+          tour = _improve2Opt(tour, matrix);
+          // ── Step 4: or-opt ──
+          tour = _improveOrOpt(tour, matrix);
+
+          debugPrint('Collection final tour: $tour');
+          final optimized = _applyCollectionTourOrder(stopsToRoute, tour);
+          _reorderCollectionStops(optimized);
+        } else if (matrix != null) {
+          // /trip unavailable: nearest neighbor + 2-opt + or-opt
+          debugPrint('Collection /trip unavailable, using matrix + local search');
+          final nnOrder = _optimizeCollectionWithMatrix(stopsToRoute, matrix);
+
+          List<int> tour = [0, ...List.generate(nnOrder.length, (i) {
+            final pos = stopsToRoute.indexOf(nnOrder[i]);
+            return pos + 1;
+          })];
+          tour = _improve2Opt(tour, matrix);
+          tour = _improveOrOpt(tour, matrix);
+          final optimized = _applyCollectionTourOrder(stopsToRoute, tour);
           _reorderCollectionStops(optimized);
         } else {
           final optimized = _optimizeCollectionWithHaversine(stopsToRoute);
@@ -724,7 +905,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
         _reorderCollectionStops(optimized);
       }
       
-      // Calculate route
+      // Calculate route geometry
       await _calculateCollectionRoute();
       
     } catch (e) {
@@ -736,8 +917,8 @@ class DeliveryRouteProvider extends ChangeNotifier {
   }
   
   void _reorderCollectionStops(List<CollectionStop> optimized) {
-    final optimizedIds = optimized.map((s) => s.orderId).toSet();
-    final unselected = _collectionStops.where((s) => !optimizedIds.contains(s.orderId)).toList();
+    final optimizedIds = optimized.map((s) => s.id).toSet();
+    final unselected = _collectionStops.where((s) => !optimizedIds.contains(s.id)).toList();
     _collectionStops = [...optimized, ...unselected];
   }
   
@@ -854,13 +1035,19 @@ class DeliveryRouteProvider extends ChangeNotifier {
     _collectionDuration = (_collectionDistance / 1000) / 30 * 3600;
   }
   
-  // Mark a collection stop as collected and move to delivery
-  void markCollectionStopCollected(int orderId) {
-    final idx = _collectionStops.indexWhere((s) => s.orderId == orderId);
+  // Mark a single collection depot stop as collected
+  void markCollectionStopCollected(int stopId) {
+    final idx = _collectionStops.indexWhere((s) => s.id == stopId);
     if (idx != -1) {
       _collectionStops[idx].isCollected = true;
       notifyListeners();
     }
+  }
+  
+  // Check if all depot stops of an order are collected
+  bool isOrderFullyCollected(int orderId) {
+    final orderStops = _collectionStops.where((s) => s.orderId == orderId);
+    return orderStops.isNotEmpty && orderStops.every((s) => s.isCollected);
   }
   
   // Clear collection route path

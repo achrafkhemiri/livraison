@@ -61,16 +61,12 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     final livreurProvider = context.read<LivreurProvider>();
     final orderProvider = context.read<OrderProvider>();
     
-    // Check OSRM connection
-    await routeProvider.checkOsrmConnection();
-    if (!mounted) return;
-    
-    // Load map data
-    await orderProvider.loadMapData();
-    if (!mounted) return;
-    
-    // Start GPS tracking
-    await livreurProvider.startPositionTracking();
+    // Run independent network calls in parallel for speed
+    await Future.wait([
+      routeProvider.checkOsrmConnection(),
+      orderProvider.loadMapData(),
+      livreurProvider.startPositionTracking(),
+    ]);
     if (!mounted) return;
     
     // Get current position
@@ -263,7 +259,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 const Icon(Icons.inventory_2, size: 16),
                 const SizedBox(width: 5),
                 Consumer<DeliveryRouteProvider>(
-                  builder: (context, p, _) => Text('Collecter (${p.collectionStops.where((s) => !s.isCollected).length})'),
+                  builder: (context, p, _) => Text('Collecter (${p.collectionStops.where((s) => !s.isCollected).map((s) => s.orderId).toSet().length})'),
                 ),
               ],
             ),
@@ -306,6 +302,12 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   Widget _buildCollectionStopsSection(DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
     final stops = routeProvider.collectionStops.where((s) => !s.isCollected).toList();
+    
+    // Group stops by orderId
+    final grouped = <int, List<CollectionStop>>{};
+    for (final stop in stops) {
+      grouped.putIfAbsent(stop.orderId, () => []).add(stop);
+    }
     final selectedCount = routeProvider.selectedCollectionIds.length;
     
     return _buildSection(
@@ -317,7 +319,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           if (stops.isNotEmpty) ...[
             Row(
               children: [
-                Text('Sélectionnés: $selectedCount', style: AppStyles.caption.copyWith(color: Colors.white70)),
+                Text('Commandes: $selectedCount/${grouped.length}', style: AppStyles.caption.copyWith(color: Colors.white70)),
                 const Spacer(),
                 _miniTextButton(
                   icon: Icons.check_box,
@@ -347,14 +349,16 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
               ),
             )
           else
-            ...stops.map((stop) => _buildCollectionStopItem(stop, routeProvider, orderProvider)),
+            ...grouped.entries.map((entry) => _buildOrderCollectionGroup(
+              entry.key, entry.value, routeProvider, orderProvider,
+            )),
         ],
       ),
     );
   }
 
-  Widget _buildCollectionStopItem(CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
-    final isSelected = routeProvider.selectedCollectionIds.contains(stop.orderId);
+  Widget _buildOrderCollectionGroup(int orderId, List<CollectionStop> depotStops, DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
+    final isSelected = routeProvider.selectedCollectionIds.contains(orderId);
     
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -365,18 +369,16 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
       ),
       child: Column(
         children: [
+          // Order header with checkbox
           InkWell(
-            onTap: () => routeProvider.toggleCollectionSelection(stop.orderId),
-            onDoubleTap: () {
-              _mapController.move(stop.position, 15);
-            },
+            onTap: () => routeProvider.toggleCollectionSelection(orderId),
             child: Padding(
               padding: const EdgeInsets.all(10),
               child: Row(
                 children: [
                   Checkbox(
                     value: isSelected,
-                    onChanged: (_) => routeProvider.toggleCollectionSelection(stop.orderId),
+                    onChanged: (_) => routeProvider.toggleCollectionSelection(orderId),
                     activeColor: Colors.orange,
                     checkColor: Colors.white,
                     side: const BorderSide(color: Colors.white54, width: 1.5),
@@ -390,7 +392,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                       color: Colors.orange.shade700,
                       shape: BoxShape.circle,
                     ),
-                    child: const Center(child: Icon(Icons.warehouse, color: Colors.white, size: 14)),
+                    child: const Center(child: Icon(Icons.shopping_bag, color: Colors.white, size: 14)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -398,44 +400,71 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          stop.depotName,
+                          'CMD #$orderId',
                           style: AppStyles.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'CMD #${stop.orderId}',
+                          '${depotStops.length} dépôt(s) à visiter',
                           style: AppStyles.caption.copyWith(color: Colors.white60),
                         ),
                       ],
                     ),
                   ),
-                  // Collect button
-                  if (isSelected)
-                    _collectButton(stop, routeProvider, orderProvider),
                 ],
               ),
             ),
           ),
-          // Show items preview when selected
-          if (isSelected && stop.items.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.only(left: 52, right: 10, bottom: 8),
-              child: Column(
-                children: stop.items.map((item) => Row(
-                  children: [
-                    Icon(Icons.circle, size: 5, color: Colors.white.withOpacity(0.5)),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        '${item.name} x${item.quantity}',
-                        style: AppStyles.caption.copyWith(color: Colors.white54),
-                      ),
-                    ),
-                  ],
-                )).toList(),
+          // Show depot stops when selected
+          if (isSelected)
+            ...depotStops.map((stop) => _buildDepotStopItem(stop, routeProvider, orderProvider)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDepotStopItem(CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
+    return Container(
+      margin: const EdgeInsets.only(left: 16, right: 8, bottom: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 24, height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade600,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text('${stop.stepIndex + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stop.depotName,
+                      style: AppStyles.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    ...stop.items.map((item) => Text(
+                      '${item.name} x${item.quantity}',
+                      style: AppStyles.caption.copyWith(color: Colors.white54, fontSize: 10),
+                    )),
+                  ],
+                ),
+              ),
+              _collectButton(stop, routeProvider, orderProvider),
+            ],
+          ),
         ],
       ),
     );
@@ -1310,13 +1339,13 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             child: const Icon(Icons.inventory_2, color: Colors.orange),
           ),
           const SizedBox(width: 12),
-          const Expanded(child: Text('Confirmer la collecte')),
+          Expanded(child: Text('Collecte - ${stop.depotName}')),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Commande #${stop.orderId} - ${stop.depotName}'),
+            Text('CMD #${stop.orderId} - Dépôt ${stop.stepIndex + 1}'),
             const SizedBox(height: 12),
             ...stop.items.map((item) => Padding(
               padding: const EdgeInsets.only(bottom: 4),
@@ -1327,7 +1356,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
               ]),
             )),
             const SizedBox(height: 12),
-            const Text('Avez-vous collecté tous les articles ?', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('Articles collectés de ce dépôt ?', style: TextStyle(fontWeight: FontWeight.w600)),
           ],
         ),
         actions: [
@@ -1335,72 +1364,94 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00c853)),
-            child: const Text('Oui, tout collecté', style: TextStyle(color: Colors.white)),
+            child: const Text('Oui, collecté', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
-      // Mark as collected in backend
-      final success = await orderProvider.markAsCollected(stop.orderId);
+      // Mark this individual depot stop as collected
+      routeProvider.markCollectionStopCollected(stop.id);
       
-      if (success && mounted) {
-        // Update provider: mark collection stop as collected
-        routeProvider.markCollectionStopCollected(stop.orderId);
+      // Check if ALL depot stops of this order are now collected
+      if (routeProvider.isOrderFullyCollected(stop.orderId)) {
+        // All depots visited → mark order as collected on backend
+        final success = await orderProvider.markAsCollected(stop.orderId);
         
-        // Add the order to delivery stops
-        final order = stop.order.copyWith(collected: true);
-        if (order.latitudeLivraison != null && order.longitudeLivraison != null) {
-          routeProvider.addStop(DeliveryStop(
-            id: order.id ?? 0,
-            name: order.clientNom ?? 'Client ${order.clientId}',
-            address: order.adresseLivraison ?? '',
-            position: LatLng(order.latitudeLivraison!, order.longitudeLivraison!),
-            order: order,
-          ));
-        } else if (order.clientLatitude != null && order.clientLongitude != null) {
-          routeProvider.addStop(DeliveryStop(
-            id: order.id ?? 0,
-            name: order.clientNom ?? 'Client ${order.clientId}',
-            address: order.adresseLivraison ?? '',
-            position: LatLng(order.clientLatitude!, order.clientLongitude!),
-            order: order,
-          ));
-        }
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(children: [
-              const Text('📦'),
-              const SizedBox(width: 8),
-              Expanded(child: Text('CMD #${stop.orderId} collectée → ajoutée aux livraisons')),
-            ]),
-            backgroundColor: const Color(0xFF00c853),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-        
-        // If all collected, switch to deliver tab
-        if (routeProvider.collectionStops.every((s) => s.isCollected)) {
-          _tabController.animateTo(1);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Row(children: [
-                  Text('🎉'),
-                  SizedBox(width: 8),
-                  Text('Toutes les collectes terminées! Passez aux livraisons.'),
-                ]),
-                backgroundColor: AppColors.primary,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                duration: const Duration(seconds: 4),
-              ),
-            );
+        if (success && mounted) {
+          // Add the order to delivery stops
+          final order = stop.order.copyWith(collected: true);
+          if (order.latitudeLivraison != null && order.longitudeLivraison != null) {
+            routeProvider.addStop(DeliveryStop(
+              id: order.id ?? 0,
+              name: order.clientNom ?? 'Client ${order.clientId}',
+              address: order.adresseLivraison ?? '',
+              position: LatLng(order.latitudeLivraison!, order.longitudeLivraison!),
+              order: order,
+            ));
+          } else if (order.clientLatitude != null && order.clientLongitude != null) {
+            routeProvider.addStop(DeliveryStop(
+              id: order.id ?? 0,
+              name: order.clientNom ?? 'Client ${order.clientId}',
+              address: order.adresseLivraison ?? '',
+              position: LatLng(order.clientLatitude!, order.clientLongitude!),
+              order: order,
+            ));
           }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(children: [
+                const Text('📦'),
+                const SizedBox(width: 8),
+                Expanded(child: Text('CMD #${stop.orderId} entièrement collectée → ajoutée aux livraisons')),
+              ]),
+              backgroundColor: const Color(0xFF00c853),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          
+          // If ALL orders collected, switch to deliver tab
+          if (routeProvider.collectionStops.every((s) => s.isCollected)) {
+            _tabController.animateTo(1);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(children: [
+                    Text('🎉'),
+                    SizedBox(width: 8),
+                    Text('Toutes les collectes terminées! Passez aux livraisons.'),
+                  ]),
+                  backgroundColor: AppColors.primary,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          }
+        }
+      } else {
+        // Partial collection - not all depots visited yet
+        final remaining = routeProvider.collectionStops
+            .where((s) => s.orderId == stop.orderId && !s.isCollected).length;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(children: [
+                const Text('✅'),
+                const SizedBox(width: 8),
+                Expanded(child: Text('${stop.depotName} collecté! Encore $remaining dépôt(s) pour CMD #${stop.orderId}')),
+              ]),
+              backgroundColor: Colors.orange.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 3),
+            ),
+          );
         }
       }
     }

@@ -225,6 +225,76 @@ class OsrmService {
     return points;
   }
 
+  /// Get optimized trip (TSP) using OSRM /trip endpoint
+  /// Returns the optimized waypoint order, distance, duration, and geometry
+  /// source=first means the trip starts from the first coordinate (driver position)
+  /// roundtrip=false means the trip does NOT return to origin
+  static Future<OsrmTripResult?> getTrip(List<LatLng> points) async {
+    if (points.length < 3) {
+      // Need at least origin + 2 stops for optimization to matter
+      return null;
+    }
+
+    try {
+      final coordinates = points.map((p) => '${p.longitude},${p.latitude}').join(';');
+      final url =
+          '$osrmUrl/trip/v1/driving/$coordinates?source=first&roundtrip=false&geometries=polyline&overview=full';
+
+      print('=== OSRM Trip Request ===');
+      print('Points count: ${points.length}');
+      print('Full URL: $url');
+
+      final response =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['code'] == 'Ok') {
+          // Extract optimized waypoint order from response
+          final waypoints = data['waypoints'] as List?;
+          if (waypoints != null && waypoints.isNotEmpty) {
+            final waypointIndices = waypoints
+                .map<int>((wp) => (wp['waypoint_index'] as num).toInt())
+                .toList();
+
+            // Extract trip geometry and metrics
+            final trips = data['trips'] as List?;
+            double totalDistance = 0;
+            double totalDuration = 0;
+            List<LatLng> geometry = [];
+
+            if (trips != null && trips.isNotEmpty) {
+              final trip = trips[0];
+              totalDistance = (trip['distance'] as num).toDouble() / 1000; // km
+              totalDuration = (trip['duration'] as num).toDouble() / 60; // min
+              final geomStr = trip['geometry'] as String?;
+              if (geomStr != null && geomStr.isNotEmpty) {
+                geometry = _decodePolyline(geomStr);
+              }
+            }
+
+            print('Trip optimized order: $waypointIndices');
+            print('Trip distance: ${totalDistance}km, duration: ${totalDuration}min');
+
+            return OsrmTripResult(
+              waypointOrder: waypointIndices,
+              distance: totalDistance,
+              duration: totalDuration,
+              geometry: geometry,
+            );
+          }
+        } else {
+          print('OSRM trip error code: ${data['code']}');
+        }
+      } else {
+        print('OSRM trip HTTP error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('OSRM trip error: $e');
+    }
+    return null;
+  }
+
   /// Haversine distance fallback
   static double haversineDistance(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371.0; // Earth radius in km
@@ -246,6 +316,21 @@ class OsrmRoute {
   final List<LatLng> geometry;
 
   OsrmRoute({
+    required this.distance,
+    required this.duration,
+    required this.geometry,
+  });
+}
+
+/// Result from OSRM /trip endpoint (TSP-optimized order)
+class OsrmTripResult {
+  final List<int> waypointOrder; // optimized indices (0 = origin, 1..n = stops)
+  final double distance; // km
+  final double duration; // minutes
+  final List<LatLng> geometry;
+
+  OsrmTripResult({
+    required this.waypointOrder,
     required this.distance,
     required this.duration,
     required this.geometry,
