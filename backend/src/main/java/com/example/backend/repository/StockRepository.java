@@ -44,4 +44,8 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
     // Find stocks for a specific product across all depots of a societe
     @Query("SELECT s FROM Stock s LEFT JOIN FETCH s.produit p LEFT JOIN FETCH s.depot d LEFT JOIN FETCH d.magasin m WHERE p.id = :produitId AND m.societe.id = :societeId AND (s.quantiteDisponible > 0 OR s.quantity > 0)")
     List<Stock> findByProduitIdAndSocieteId(@Param("produitId") Long produitId, @Param("societeId") Long societeId);
+
+    // Batch: find stocks for multiple products across all depots of a societe (avoids N+1)
+    @Query("SELECT s FROM Stock s LEFT JOIN FETCH s.produit p LEFT JOIN FETCH s.depot d LEFT JOIN FETCH d.magasin m WHERE p.id IN :produitIds AND m.societe.id = :societeId AND (s.quantiteDisponible > 0 OR s.quantity > 0)")
+    List<Stock> findByProduitIdsAndSocieteId(@Param("produitIds") List<Long> produitIds, @Param("societeId") Long societeId);
 }

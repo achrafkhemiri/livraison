@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../data/models/models.dart';
@@ -22,25 +23,25 @@ class DeliveryStop {
   });
 }
 
-/// Represents a collection stop at a depot
+/// Represents a collection stop at a depot (merged across orders)
 class CollectionStop {
-  final int id; // unique stop ID (orderId * 1000 + stepIndex)
-  final int orderId;
-  final int stepIndex;
+  final int id; // depotId
+  final int depotId;
   final String depotName;
   final LatLng position;
-  final List<CollectionItem> items;
-  final Order order;
+  final List<CollectionItem> items; // items across ALL orders for this depot
+  final List<int> orderIds; // orders served at this depot
+  final List<Order> orders; // order objects
   bool isCollected;
   
   CollectionStop({
     required this.id,
-    required this.orderId,
-    required this.stepIndex,
+    required this.depotId,
     required this.depotName,
     required this.position,
     required this.items,
-    required this.order,
+    required this.orderIds,
+    required this.orders,
     this.isCollected = false,
   });
 }
@@ -49,8 +50,9 @@ class CollectionStop {
 class CollectionItem {
   final String name;
   final int quantity;
+  final int orderId; // which order this item belongs to
   
-  CollectionItem({required this.name, required this.quantity});
+  CollectionItem({required this.name, required this.quantity, required this.orderId});
 }
 
 /// The active mode in the map: collect from depots or deliver to clients
@@ -70,6 +72,8 @@ class DeliveryRouteProvider extends ChangeNotifier {
   // Collection stops (depots)
   List<CollectionStop> _collectionStops = [];
   Set<int> _selectedCollectionIds = {}; // Selected collection stops (by orderId)
+  Set<int> _lastComputedOrderIds = {}; // OrderIds used in the last plan computation
+  List<Order> _allAvailableOrders = []; // All uncollected orders available for selection
   List<LatLng> _collectionRoutePoints = [];
   double _collectionDistance = 0;
   double _collectionDuration = 0;
@@ -105,8 +109,15 @@ class DeliveryRouteProvider extends ChangeNotifier {
   // Collection getters
   List<CollectionStop> get collectionStops => _collectionStops;
   Set<int> get selectedCollectionIds => _selectedCollectionIds;
-  List<CollectionStop> get selectedCollectionStops => _collectionStops.where((s) => _selectedCollectionIds.contains(s.orderId)).toList();
+  List<CollectionStop> get selectedCollectionStops => _collectionStops.where((s) => s.orderIds.any((oid) => _selectedCollectionIds.contains(oid))).toList();
   List<LatLng> get collectionRoutePoints => _collectionRoutePoints;
+  List<Order> get allAvailableOrders => _allAvailableOrders;
+  /// True when the user changed their order selection since the last plan computation
+  bool get needsRecomputation {
+    if (_allAvailableOrders.isEmpty) return false;
+    if (_selectedCollectionIds.length != _lastComputedOrderIds.length) return true;
+    return !_selectedCollectionIds.containsAll(_lastComputedOrderIds);
+  }
   double get collectionDistance => _collectionDistance;
   double get collectionDuration => _collectionDuration;
   bool get usedOsrmGeometryCollection => _usedOsrmGeometryCollection;
@@ -749,70 +760,233 @@ class DeliveryRouteProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  // Initialize collection stops from orders (depot-based)
-  Future<void> initializeCollectionStops(List<Order> orders, OrderService orderService) async {
+  // Initialize collection stops from orders — uses optimal merged collection plan
+  // Respects existing manual collection plans set by admin.
+  Future<void> initializeCollectionStops(List<Order> orders, OrderService orderService, {double? livreurLat, double? livreurLon}) async {
     _isLoading = true;
     _errorMessage = null;
     _collectionStops = [];
     notifyListeners();
     
     try {
-      // Load collection plans in parallel for speed
       final validOrders = orders.where((o) => o.collected != true && o.id != null).toList();
+      _allAvailableOrders = validOrders;
       
-      final futures = validOrders.map((order) async {
-        try {
-          final plan = await orderService.generateCollectionPlan(order.id!);
-          return MapEntry(order, plan);
-        } catch (e) {
-          debugPrint('Failed to generate collection plan for order ${order.id}: \$e');
-          return MapEntry(order, null);
-        }
-      }).toList();
-      
-      final results = await Future.wait(futures);
-      
-      for (final entry in results) {
-        final order = entry.key;
-        final plan = entry.value;
-        if (plan != null) {
-          final steps = plan['collectionSteps'] as List? ?? [];
-          // Create a SEPARATE stop for each depot step (don't merge)
-          for (int stepIdx = 0; stepIdx < steps.length; stepIdx++) {
-            final step = steps[stepIdx];
-            final lat = step['depotLatitude'];
-            final lon = step['depotLongitude'];
-            if (lat != null && lon != null) {
-              final items = (step['items'] as List? ?? []).map((item) => CollectionItem(
-                name: item['produitNom'] ?? 'Produit',
-                quantity: item['quantite'] ?? 0,
-              )).toList();
-              
-              _collectionStops.add(CollectionStop(
-                id: order.id! * 1000 + stepIdx,
-                orderId: order.id!,
-                stepIndex: stepIdx,
-                depotName: step['depotNom'] ?? 'Dépôt ${stepIdx + 1}',
-                position: LatLng(
-                  (lat as num).toDouble(),
-                  (lon as num).toDouble(),
-                ),
-                items: items,
-                order: order,
-              ));
-            }
-          }
-        }
+      if (validOrders.isEmpty) {
+        _lastComputedOrderIds = {};
+        _isLoading = false;
+        notifyListeners();
+        return;
       }
+
+      // Separate orders with existing manual plans vs those needing generation
+      final ordersWithPlan = validOrders.where((o) => o.collectionPlan != null && o.collectionPlan!.isNotEmpty).toList();
+      final ordersWithoutPlan = validOrders.where((o) => o.collectionPlan == null || o.collectionPlan!.isEmpty).toList();
+
+      // 1) Parse existing manual plans
+      for (final order in ordersWithPlan) {
+        _parseExistingCollectionPlan(order, validOrders);
+      }
+
+      // 2) Generate optimal plan for orders without existing plans
+      if (ordersWithoutPlan.isNotEmpty) {
+        final autoOrderIds = ordersWithoutPlan.map((o) => o.id!).toList();
+        final plan = await orderService.generateOptimalCollectionPlan(
+          autoOrderIds, livreurLat: livreurLat, livreurLon: livreurLon,
+        );
+        _parseMergedSteps(plan, validOrders);
+      }
+
+      // 3) Merge stops from same depot (manual + auto might overlap)
+      _mergeCollectionStopsByDepot();
       
-      // Auto-select all orders
-      _selectedCollectionIds = _collectionStops.map((s) => s.orderId).toSet();
+      // Auto-select all orders & track what we computed for
+      _selectedCollectionIds = _collectionStops.expand((s) => s.orderIds).toSet();
+      _lastComputedOrderIds = Set.from(_selectedCollectionIds);
     } catch (e) {
       _errorMessage = e.toString();
+      debugPrint('Error initializing collection stops: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+  
+  /// Recompute the collection plan for the currently selected orders only.
+  /// Call this when the user changes their order selection and clicks "Recalculer".
+  /// Respects existing manual plans.
+  Future<void> recomputeCollectionPlan(OrderService orderService, {double? livreurLat, double? livreurLon}) async {
+    final selectedOrderIds = _selectedCollectionIds
+        .where((oid) => _allAvailableOrders.any((o) => o.id == oid))
+        .toList();
+    
+    if (selectedOrderIds.isEmpty) {
+      _collectionStops = [];
+      _lastComputedOrderIds = {};
+      _collectionRoutePoints = [];
+      _collectionDistance = 0;
+      _collectionDuration = 0;
+      notifyListeners();
+      return;
+    }
+    
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    
+    try {
+      _collectionStops = [];
+      
+      final selectedOrders = _allAvailableOrders.where((o) => selectedOrderIds.contains(o.id)).toList();
+      final ordersWithPlan = selectedOrders.where((o) => o.collectionPlan != null && o.collectionPlan!.isNotEmpty).toList();
+      final ordersWithoutPlan = selectedOrders.where((o) => o.collectionPlan == null || o.collectionPlan!.isEmpty).toList();
+
+      // 1) Parse existing manual plans
+      for (final order in ordersWithPlan) {
+        _parseExistingCollectionPlan(order, _allAvailableOrders);
+      }
+
+      // 2) Generate optimal plan for orders needing auto generation
+      if (ordersWithoutPlan.isNotEmpty) {
+        final autoIds = ordersWithoutPlan.map((o) => o.id!).toList();
+        final plan = await orderService.generateOptimalCollectionPlan(
+          autoIds, livreurLat: livreurLat, livreurLon: livreurLon,
+        );
+        _parseMergedSteps(plan, _allAvailableOrders);
+      }
+
+      // 3) Merge stops from same depot
+      _mergeCollectionStopsByDepot();
+      _lastComputedOrderIds = Set.from(selectedOrderIds);
+      
+      // Clear route since depots changed
+      _collectionRoutePoints = [];
+      _collectionDistance = 0;
+      _collectionDuration = 0;
+      _usedOsrmGeometryCollection = false;
+      
+      debugPrint('Recomputed: ${_collectionStops.length} depots for ${selectedOrderIds.length} orders (${ordersWithPlan.length} manual, ${ordersWithoutPlan.length} auto)');
+    } catch (e) {
+      _errorMessage = e.toString();
+      debugPrint('Error recomputing collection plan: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  /// Parse mergedSteps from the backend response into CollectionStop objects
+  void _parseMergedSteps(Map<String, dynamic> plan, List<Order> availableOrders) {
+    final mergedSteps = plan['mergedSteps'] as List? ?? [];
+    debugPrint('Optimal collection plan: ${mergedSteps.length} depots');
+
+    for (final step in mergedSteps) {
+      final lat = step['depotLatitude'];
+      final lon = step['depotLongitude'];
+      if (lat == null || lon == null) continue;
+
+      final depotId = (step['depotId'] as num).toInt();
+      final stepOrderIds = (step['orderIds'] as List? ?? [])
+          .map((e) => (e as num).toInt()).toList();
+
+      final items = (step['items'] as List? ?? []).map((item) => CollectionItem(
+        name: item['produitNom'] ?? 'Produit',
+        quantity: (item['quantite'] as num?)?.toInt() ?? 0,
+        orderId: (item['orderId'] as num?)?.toInt() ?? 0,
+      )).toList();
+
+      // Resolve order objects for this depot
+      final stepOrders = stepOrderIds
+          .map((oid) => availableOrders.where((o) => o.id == oid).firstOrNull)
+          .whereType<Order>()
+          .toList();
+
+      _collectionStops.add(CollectionStop(
+        id: depotId,
+        depotId: depotId,
+        depotName: step['depotNom'] ?? 'Dépôt',
+        position: LatLng(
+          (lat as num).toDouble(),
+          (lon as num).toDouble(),
+        ),
+        items: items,
+        orderIds: stepOrderIds,
+        orders: stepOrders,
+      ));
+    }
+  }
+
+  /// Parse an order's existing collectionPlan JSON into CollectionStop objects.
+  /// Used for orders where the admin manually set the collection plan.
+  void _parseExistingCollectionPlan(Order order, List<Order> availableOrders) {
+    try {
+      final List<dynamic> steps = jsonDecode(order.collectionPlan!);
+      debugPrint('Parsing manual plan for order #${order.id}: ${steps.length} steps');
+
+      for (final step in steps) {
+        final lat = step['depotLatitude'];
+        final lon = step['depotLongitude'];
+        if (lat == null || lon == null) continue;
+
+        final depotId = (step['depotId'] as num).toInt();
+
+        final items = (step['items'] as List? ?? []).map((item) => CollectionItem(
+          name: item['produitNom'] ?? 'Produit',
+          quantity: (item['quantite'] as num?)?.toInt() ?? 0,
+          orderId: order.id ?? 0,
+        )).toList();
+
+        _collectionStops.add(CollectionStop(
+          id: depotId,
+          depotId: depotId,
+          depotName: step['depotNom'] ?? 'Dépôt',
+          position: LatLng(
+            (lat as num).toDouble(),
+            (lon as num).toDouble(),
+          ),
+          items: items,
+          orderIds: [order.id!],
+          orders: [order],
+        ));
+      }
+    } catch (e) {
+      debugPrint('Error parsing manual collection plan for order #${order.id}: $e');
+    }
+  }
+
+  /// Merge collection stops that target the same depot (e.g. manual + auto).
+  void _mergeCollectionStopsByDepot() {
+    if (_collectionStops.length <= 1) return;
+
+    final Map<int, CollectionStop> merged = {};
+    for (final stop in _collectionStops) {
+      if (merged.containsKey(stop.depotId)) {
+        final existing = merged[stop.depotId]!;
+        // Combine items
+        final combinedItems = [...existing.items, ...stop.items];
+        // Combine order IDs (deduplicate)
+        final combinedOrderIds = {...existing.orderIds, ...stop.orderIds}.toList();
+        // Combine order objects (deduplicate by id)
+        final seenIds = <int>{};
+        final combinedOrders = <Order>[];
+        for (final o in [...existing.orders, ...stop.orders]) {
+          if (o.id != null && seenIds.add(o.id!)) combinedOrders.add(o);
+        }
+        merged[stop.depotId] = CollectionStop(
+          id: existing.id,
+          depotId: existing.depotId,
+          depotName: existing.depotName,
+          position: existing.position,
+          items: combinedItems,
+          orderIds: combinedOrderIds,
+          orders: combinedOrders,
+          isCollected: existing.isCollected,
+        );
+      } else {
+        merged[stop.depotId] = stop;
+      }
+    }
+    _collectionStops = merged.values.toList();
   }
   
   // Toggle collection stop selection
@@ -827,7 +1001,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
   
   // Select all collection stops
   void selectAllCollectionStops() {
-    _selectedCollectionIds = _collectionStops.map((s) => s.orderId).toSet();
+    _selectedCollectionIds = _collectionStops.expand((s) => s.orderIds).toSet();
     notifyListeners();
   }
   
@@ -1044,9 +1218,9 @@ class DeliveryRouteProvider extends ChangeNotifier {
     }
   }
   
-  // Check if all depot stops of an order are collected
+  // Check if all depot stops containing an order are collected
   bool isOrderFullyCollected(int orderId) {
-    final orderStops = _collectionStops.where((s) => s.orderId == orderId);
+    final orderStops = _collectionStops.where((s) => s.orderIds.contains(orderId));
     return orderStops.isNotEmpty && orderStops.every((s) => s.isCollected);
   }
   

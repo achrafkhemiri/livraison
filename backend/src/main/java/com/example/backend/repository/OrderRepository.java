@@ -58,4 +58,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // Find all with items
     @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.produit LEFT JOIN FETCH o.user")
     List<Order> findAllWithItems();
+
+    // Batch load multiple orders by IDs with items
+    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.produit LEFT JOIN FETCH o.user WHERE o.id IN :ids")
+    List<Order> findByIdsWithItems(@Param("ids") List<Long> ids);
 }

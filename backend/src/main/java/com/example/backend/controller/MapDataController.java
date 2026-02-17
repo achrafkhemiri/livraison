@@ -70,6 +70,29 @@ public class MapDataController {
     }
 
     /**
+     * Generate an OPTIMAL collection plan for one or more orders.
+     * Pipeline: aggregate demand → min-depot set cover → shortest route (haversine NN).
+     * Body: { "orderIds": [1,2,3], "livreurLat": 34.74, "livreurLon": 10.76 }
+     */
+    @PostMapping("/orders/optimal-collection-plan")
+    @PreAuthorize("hasAnyRole('GERANT', 'LIVREUR')")
+    public ResponseEntity<Map<String, Object>> generateOptimalCollectionPlan(@RequestBody Map<String, Object> request) {
+        Long societeId = securityService.getCurrentUserSocieteId();
+        if (societeId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        @SuppressWarnings("unchecked")
+        List<Number> rawIds = (List<Number>) request.get("orderIds");
+        if (rawIds == null || rawIds.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<Long> orderIds = rawIds.stream().map(Number::longValue).toList();
+        Double livreurLat = request.get("livreurLat") != null ? ((Number) request.get("livreurLat")).doubleValue() : null;
+        Double livreurLon = request.get("livreurLon") != null ? ((Number) request.get("livreurLon")).doubleValue() : null;
+        return ResponseEntity.ok(mapDataService.generateOptimalCollectionPlan(orderIds, societeId, livreurLat, livreurLon));
+    }
+
+    /**
      * Mark an order as collected (all items picked up from depots)
      */
     @PatchMapping("/orders/{orderId}/collected")

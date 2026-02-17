@@ -112,6 +112,7 @@ class Order {
       'longitudeLivraison': longitudeLivraison,
       'dateLivraisonPrevue': dateLivraisonPrevue?.toIso8601String(),
       'notes': notes,
+      if (collectionPlan != null) 'collectionPlan': collectionPlan,
       if (items != null) 'items': items!.map((e) => e.toJson()).toList(),
     };
   }

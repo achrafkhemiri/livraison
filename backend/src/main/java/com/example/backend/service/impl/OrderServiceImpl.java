@@ -161,6 +161,11 @@ public class OrderServiceImpl implements OrderService {
         order.setDateLivraisonPrevue(orderDTO.getDateLivraisonPrevue());
         order.setNotes(orderDTO.getNotes());
         
+        // Save manual collection plan if provided by admin
+        if (orderDTO.getCollectionPlan() != null && !orderDTO.getCollectionPlan().isBlank()) {
+            order.setCollectionPlan(orderDTO.getCollectionPlan());
+        }
+        
         // Save order first
         order = orderRepository.save(order);
         

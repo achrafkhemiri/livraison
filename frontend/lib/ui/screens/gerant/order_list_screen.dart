@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
@@ -466,9 +467,15 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
 
     // Products with stock from the API
     List<Map<String, dynamic>> productsStock = [];
-    // Selected items: [{produitId, produitNom, prixHT, quantite}]
+    // Selected items: [{produitId, produitNom, prixHT, quantite, depotStocks: [...]}]
     List<Map<String, dynamic>> selectedItems = [];
     bool loadingProducts = true;
+
+    // Collection plan mode: 'auto' or 'manual'
+    String planMode = 'auto';
+    // Manual depot assignments per product index:
+    //   { productIndex: [ { depotId, depotNom, depotLatitude, depotLongitude, quantite } ] }
+    Map<int, List<Map<String, dynamic>>> manualAssignments = {};
 
     // Load clients and products BEFORE showing dialog to avoid display issues
     final orderProvider = context.read<OrderProvider>();
@@ -660,6 +667,302 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                       ),
                     ],
                     
+                    // ── Section 3: Plan de collection ─────────────────
+                    if (selectedItems.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Text('Plan de collection', style: AppStyles.headingSmall),
+                      const SizedBox(height: 8),
+                      // Toggle auto / manual
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() { planMode = 'auto'; manualAssignments.clear(); }),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: planMode == 'auto' ? AppColors.primary : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.auto_awesome, size: 18,
+                                        color: planMode == 'auto' ? Colors.white : AppColors.textSecondary),
+                                      const SizedBox(width: 6),
+                                      Text('Automatique',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600, fontSize: 13,
+                                          color: planMode == 'auto' ? Colors.white : AppColors.textSecondary,
+                                        )),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() { planMode = 'manual'; }),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: planMode == 'manual' ? AppColors.primary : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.touch_app, size: 18,
+                                        color: planMode == 'manual' ? Colors.white : AppColors.textSecondary),
+                                      const SizedBox(width: 6),
+                                      Text('Manuel',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600, fontSize: 13,
+                                          color: planMode == 'manual' ? Colors.white : AppColors.textSecondary,
+                                        )),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (planMode == 'auto')
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Le système choisira automatiquement les dépôts optimaux (minimum de dépôts + trajet le plus court).',
+                                  style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (planMode == 'manual') ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 18, color: Colors.orange.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Choisissez le dépôt source pour chaque produit. Le livreur suivra ce plan.',
+                                  style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // Per-product depot picker
+                        ...selectedItems.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final item = entry.value;
+                          final depotStocks = (item['depotStocks'] as List?) ?? [];
+                          final needed = item['quantite'] as int;
+                          final assignments = manualAssignments[idx] ?? [];
+                          final assignedTotal = assignments.fold<int>(0, (s, a) => s + ((a['quantite'] as int?) ?? 0));
+                          final fulfilled = assignedTotal >= needed;
+                          
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: fulfilled ? AppColors.success.withOpacity(0.5) : Colors.orange.shade300,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Theme(
+                              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                              child: ExpansionTile(
+                                initiallyExpanded: true,
+                                tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                                title: Row(
+                                  children: [
+                                    Icon(
+                                      fulfilled ? Icons.check_circle : Icons.warning_amber_rounded,
+                                      size: 20,
+                                      color: fulfilled ? AppColors.success : Colors.orange,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        item['produitNom'] ?? 'Produit',
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: fulfilled ? AppColors.success.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        '$assignedTotal / $needed',
+                                        style: TextStyle(
+                                          fontSize: 12, fontWeight: FontWeight.w600,
+                                          color: fulfilled ? AppColors.success : Colors.orange.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                                    child: Column(
+                                      children: depotStocks.map<Widget>((depot) {
+                                        final depotId = depot['depotId'];
+                                        final depotNom = depot['depotNom'] ?? 'Dépôt #$depotId';
+                                        final available = (depot['quantiteDisponible'] as num?)?.toInt() ?? 0;
+                                        // Find this depot's current assignment
+                                        final existingIdx = assignments.indexWhere((a) => a['depotId'] == depotId);
+                                        final isAssigned = existingIdx >= 0;
+                                        final assignedQty = isAssigned ? (assignments[existingIdx]['quantite'] as int) : 0;
+                                        
+                                        return Container(
+                                          margin: const EdgeInsets.only(top: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: isAssigned ? AppColors.primary.withOpacity(0.05) : Colors.grey.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: isAssigned ? AppColors.primary.withOpacity(0.3) : Colors.grey.shade200,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              // Depot info
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(depotNom,
+                                                      style: TextStyle(
+                                                        fontWeight: FontWeight.w600, fontSize: 13,
+                                                        color: isAssigned ? AppColors.primary : AppColors.textPrimary,
+                                                      )),
+                                                    Text('Disponible: $available',
+                                                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                                  ],
+                                                ),
+                                              ),
+                                              // Quantity controls
+                                              if (isAssigned) ...[
+                                                IconButton(
+                                                  icon: const Icon(Icons.remove_circle_outline, size: 22),
+                                                  color: AppColors.primary,
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      if (assignedQty <= 1) {
+                                                        assignments.removeAt(existingIdx);
+                                                        if (assignments.isEmpty) manualAssignments.remove(idx);
+                                                      } else {
+                                                        assignments[existingIdx]['quantite'] = assignedQty - 1;
+                                                      }
+                                                    });
+                                                  },
+                                                ),
+                                                Container(
+                                                  width: 32,
+                                                  alignment: Alignment.center,
+                                                  child: Text('$assignedQty',
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.add_circle_outline, size: 22),
+                                                  color: AppColors.primary,
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      if (assignedQty < available) {
+                                                        assignments[existingIdx]['quantite'] = assignedQty + 1;
+                                                      }
+                                                    });
+                                                  },
+                                                ),
+                                                IconButton(
+                                                  icon: Icon(Icons.close, size: 18, color: AppColors.error),
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      assignments.removeAt(existingIdx);
+                                                      if (assignments.isEmpty) manualAssignments.remove(idx);
+                                                    });
+                                                  },
+                                                ),
+                                              ] else
+                                                TextButton.icon(
+                                                  onPressed: available <= 0 ? null : () {
+                                                    setState(() {
+                                                      final remaining = needed - assignedTotal;
+                                                      final qty = remaining > 0 ? (remaining <= available ? remaining : available) : 1;
+                                                      final newAssignment = {
+                                                        'depotId': depotId,
+                                                        'depotNom': depotNom,
+                                                        'depotLatitude': depot['depotLatitude'],
+                                                        'depotLongitude': depot['depotLongitude'],
+                                                        'quantite': qty > available ? available : qty,
+                                                      };
+                                                      manualAssignments.putIfAbsent(idx, () => []);
+                                                      manualAssignments[idx]!.add(newAssignment);
+                                                    });
+                                                  },
+                                                  icon: Icon(Icons.add, size: 16, color: available <= 0 ? Colors.grey : AppColors.primary),
+                                                  label: Text(
+                                                    available <= 0 ? 'Rupture' : 'Sélectionner',
+                                                    style: TextStyle(fontSize: 12, color: available <= 0 ? Colors.grey : AppColors.primary),
+                                                  ),
+                                                  style: TextButton.styleFrom(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    minimumSize: Size.zero,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ],
+                    
                     const SizedBox(height: 12),
                     TextField(
                       controller: notesController,
@@ -684,6 +987,25 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                     return;
                   }
 
+                  // Validate manual assignments if manual mode
+                  if (planMode == 'manual' && selectedItems.isNotEmpty) {
+                    for (int i = 0; i < selectedItems.length; i++) {
+                      final item = selectedItems[i];
+                      final needed = item['quantite'] as int;
+                      final assignments = manualAssignments[i] ?? [];
+                      final assignedTotal = assignments.fold<int>(0, (s, a) => s + ((a['quantite'] as int?) ?? 0));
+                      if (assignedTotal < needed) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Quantité insuffisante pour "${item['produitNom']}" ($assignedTotal / $needed)'),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                        return;
+                      }
+                    }
+                  }
+
                   final clientId = selectedClient!.id!;
                   final lat = double.tryParse(latController.text);
                   final lng = double.tryParse(lngController.text);
@@ -692,6 +1014,12 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                     produitId: item['produitId'] as int,
                     quantite: item['quantite'] as int,
                   )).toList();
+
+                  // Build manual collection plan JSON if manual mode
+                  String? collectionPlanJson;
+                  if (planMode == 'manual' && manualAssignments.isNotEmpty) {
+                    collectionPlanJson = _buildManualCollectionPlan(selectedItems, manualAssignments);
+                  }
 
                   final provider = context.read<OrderProvider>();
                   final order = Order(
@@ -702,14 +1030,16 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                     notes: notesController.text.isEmpty ? null : notesController.text,
                     status: 'pending',
                     items: items.isNotEmpty ? items : null,
+                    collectionPlan: collectionPlanJson,
                   );
 
                   final success = await provider.createOrder(order);
                   if (context.mounted) {
                     Navigator.pop(context);
+                    final modeLabel = planMode == 'manual' ? ' (plan manuel)' : '';
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(success ? 'Commande créée avec ${items.length} produit(s)' : 'Erreur: ${provider.errorMessage}'),
+                        content: Text(success ? 'Commande créée avec ${items.length} produit(s)$modeLabel' : 'Erreur: ${provider.errorMessage}'),
                         backgroundColor: success ? AppColors.success : AppColors.error,
                       ),
                     );
@@ -723,6 +1053,46 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
         },
       ),
     );
+  }
+
+  /// Build collection plan JSON from manual depot assignments.
+  /// Format matches backend's mergedSteps: group items by depot.
+  String _buildManualCollectionPlan(
+    List<Map<String, dynamic>> selectedItems,
+    Map<int, List<Map<String, dynamic>>> manualAssignments,
+  ) {
+    // Group by depotId → list of items
+    final Map<int, Map<String, dynamic>> depotSteps = {};
+
+    for (final entry in manualAssignments.entries) {
+      final productIdx = entry.key;
+      final item = selectedItems[productIdx];
+      for (final assignment in entry.value) {
+        final depotId = assignment['depotId'] as int;
+        depotSteps.putIfAbsent(depotId, () => {
+          'depotId': depotId,
+          'depotNom': assignment['depotNom'],
+          'depotLatitude': assignment['depotLatitude'],
+          'depotLongitude': assignment['depotLongitude'],
+          'items': <Map<String, dynamic>>[],
+          'orderIds': <int>[],
+        });
+        (depotSteps[depotId]!['items'] as List).add({
+          'produitId': item['produitId'],
+          'produitNom': item['produitNom'],
+          'quantite': assignment['quantite'],
+        });
+      }
+    }
+
+    // Build steps array with step indices (1-based for consistency)
+    final steps = depotSteps.values.toList().asMap().entries.map((e) {
+      final step = Map<String, dynamic>.from(e.value);
+      step['step'] = e.key + 1;
+      return step;
+    }).toList();
+
+    return jsonEncode(steps);
   }
 
   void _showProductPicker(
@@ -786,6 +1156,7 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                                       'produitNom': product['produitNom'],
                                       'prixHT': (product['prixHT'] ?? 0).toDouble(),
                                       'totalStock': totalStock,
+                                      'depotStocks': product['depotStocks'] ?? [],
                                       'quantite': 1,
                                     });
                                   });

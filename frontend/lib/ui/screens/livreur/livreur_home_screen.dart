@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
@@ -564,22 +566,42 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
   }
 
   Future<void> _showCollectionPlan(Order order, OrderProvider provider) async {
-    // Generate collection plan
-    final plan = await provider.generateCollectionPlan(order.id!);
-    if (!mounted) return;
+    List<dynamic> steps = [];
+    int totalDepots = 0;
+    bool isManual = false;
 
-    if (plan == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur: ${provider.errorMessage}'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-      return;
+    // 1) Try to use the existing local collection plan (manual or previously generated)
+    if (order.collectionPlan != null && order.collectionPlan!.isNotEmpty) {
+      try {
+        steps = jsonDecode(order.collectionPlan!) as List;
+        totalDepots = steps.length;
+        isManual = true;
+        debugPrint('Using local collectionPlan for order #${order.id}: $totalDepots depot(s)');
+      } catch (e) {
+        debugPrint('Error parsing local collectionPlan: $e');
+      }
     }
 
-    final steps = plan['collectionSteps'] as List? ?? [];
-    final totalDepots = plan['totalDepots'] ?? 0;
+    // 2) Fallback to backend API only if no local plan
+    if (steps.isEmpty) {
+      final plan = await provider.generateCollectionPlan(order.id!);
+      if (!mounted) return;
+
+      if (plan == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: ${provider.errorMessage}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      steps = plan['collectionSteps'] as List? ?? [];
+      totalDepots = plan['totalDepots'] ?? 0;
+    }
+
+    if (!mounted) return;
 
     await showModalBottomSheet(
       context: context,
@@ -614,13 +636,30 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                 ],
               ),
               const SizedBox(height: 8),
-              Text('Commande #${order.id} - $totalDepots dépôt(s) à visiter', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Commande #${order.id} - $totalDepots dépôt(s) à visiter', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                  ),
+                  if (isManual)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text('Manuel', style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
+                    ),
+                ],
+              ),
               const SizedBox(height: 16),
               if (steps.isEmpty)
                 Center(child: Text('Aucun article à collecter', style: AppStyles.bodyMedium))
               else
-                ...steps.map((step) {
-                  final stepNum = step['step'];
+                ...steps.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final step = entry.value;
+                  final stepNum = idx + 1; // Always 1-based display
                   final depotNom = step['depotNom'] ?? 'Dépôt';
                   final items = step['items'] as List? ?? [];
                   return Container(

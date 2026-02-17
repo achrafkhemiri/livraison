@@ -10,4 +10,5 @@ public interface MapDataService {
     MapDataDTO getMapData(Long societeId);
     List<ProductStockInfoDTO> getProductsWithStockBySociete(Long societeId);
     Map<String, Object> generateCollectionPlan(Long orderId, Long societeId);
+    Map<String, Object> generateOptimalCollectionPlan(List<Long> orderIds, Long societeId, Double livreurLat, Double livreurLon);
 }

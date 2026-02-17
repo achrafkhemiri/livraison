@@ -243,4 +243,63 @@ class MapDataControllerTest {
 
         verify(orderService, never()).markAsCollected(any());
     }
+
+    // ========================
+    // POST /api/orders/optimal-collection-plan
+    // ========================
+
+    @Test
+    void optimalCollectionPlan_shouldReturnPlan() throws Exception {
+        when(securityService.getCurrentUserSocieteId()).thenReturn(1L);
+
+        Map<String, Object> plan = Map.of(
+            "totalDepots", 2,
+            "totalOrders", 2,
+            "mergedSteps", List.of(
+                Map.of("step", 0, "depotId", 2L, "depotNom", "B",
+                       "items", List.of(Map.of("produitNom", "p2", "quantite", 5, "orderId", 1L)),
+                       "orderIds", List.of(1L, 2L)),
+                Map.of("step", 1, "depotId", 4L, "depotNom", "D",
+                       "items", List.of(Map.of("produitNom", "p3", "quantite", 1, "orderId", 1L)),
+                       "orderIds", List.of(1L))
+            )
+        );
+        when(mapDataService.generateOptimalCollectionPlan(List.of(1L, 2L), 1L, 34.74, 10.76)).thenReturn(plan);
+
+        mockMvc.perform(post("/api/orders/optimal-collection-plan")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                    Map.of("orderIds", List.of(1, 2), "livreurLat", 34.74, "livreurLon", 10.76))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalDepots", is(2)))
+                .andExpect(jsonPath("$.totalOrders", is(2)))
+                .andExpect(jsonPath("$.mergedSteps", hasSize(2)))
+                .andExpect(jsonPath("$.mergedSteps[0].depotNom", is("B")));
+
+        verify(mapDataService).generateOptimalCollectionPlan(List.of(1L, 2L), 1L, 34.74, 10.76);
+    }
+
+    @Test
+    void optimalCollectionPlan_shouldReturnForbiddenWhenNoSociete() throws Exception {
+        when(securityService.getCurrentUserSocieteId()).thenReturn(null);
+
+        mockMvc.perform(post("/api/orders/optimal-collection-plan")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("orderIds", List.of(1)))))
+                .andExpect(status().isForbidden());
+
+        verify(mapDataService, never()).generateOptimalCollectionPlan(any(), any(), any(), any());
+    }
+
+    @Test
+    void optimalCollectionPlan_shouldReturnBadRequestWhenNoOrderIds() throws Exception {
+        when(securityService.getCurrentUserSocieteId()).thenReturn(1L);
+
+        mockMvc.perform(post("/api/orders/optimal-collection-plan")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("orderIds", List.of()))))
+                .andExpect(status().isBadRequest());
+
+        verify(mapDataService, never()).generateOptimalCollectionPlan(any(), any(), any(), any());
+    }
 }

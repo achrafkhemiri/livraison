@@ -84,6 +84,16 @@ class OrderService {
     return response as Map<String, dynamic>;
   }
 
+  /// Generate optimal collection plan for multiple orders (min depots + shortest path)
+  Future<Map<String, dynamic>> generateOptimalCollectionPlan(
+      List<int> orderIds, {double? livreurLat, double? livreurLon}) async {
+    final body = <String, dynamic>{'orderIds': orderIds};
+    if (livreurLat != null) body['livreurLat'] = livreurLat;
+    if (livreurLon != null) body['livreurLon'] = livreurLon;
+    final response = await _api.post('${ApiConstants.orders}/optimal-collection-plan', body);
+    return response as Map<String, dynamic>;
+  }
+
   /// Mark order as collected (all items picked up from depots)
   Future<Order> markAsCollected(int orderId) async {
     final response = await _api.patch('${ApiConstants.orders}/$orderId/collected');
