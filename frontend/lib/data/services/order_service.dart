@@ -99,4 +99,30 @@ class OrderService {
     final response = await _api.patch('${ApiConstants.orders}/$orderId/collected');
     return Order.fromJson(response);
   }
+
+  // ===== Assignment workflow =====
+
+  /// Accept proposed assignment (livreur)
+  Future<Order> acceptAssignment(int orderId) async {
+    final response = await _api.patch('${ApiConstants.orders}/$orderId/accept');
+    return Order.fromJson(response);
+  }
+
+  /// Reject proposed assignment (livreur)
+  Future<Order> rejectAssignment(int orderId) async {
+    final response = await _api.patch('${ApiConstants.orders}/$orderId/reject');
+    return Order.fromJson(response);
+  }
+
+  /// Get orders proposed to the current livreur
+  Future<List<Order>> getProposedOrders() async {
+    final response = await _api.get('${ApiConstants.orders}/proposed');
+    return (response as List).map((e) => Order.fromJson(e)).toList();
+  }
+
+  /// Get recommended livreurs for an order (admin)
+  Future<List<Map<String, dynamic>>> recommendLivreurs(int orderId) async {
+    final response = await _api.get('${ApiConstants.orders}/$orderId/recommend-livreurs');
+    return (response as List).map((e) => e as Map<String, dynamic>).toList();
+  }
 }

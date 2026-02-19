@@ -144,6 +144,16 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
         statusText = 'En attente';
         statusIcon = Icons.schedule;
         break;
+      case 'assigned':
+        statusColor = Colors.amber;
+        statusText = 'Proposée au livreur';
+        statusIcon = Icons.assignment_ind;
+        break;
+      case 'en_cours':
+        statusColor = AppColors.statusProcessing;
+        statusText = 'Acceptée';
+        statusIcon = Icons.thumb_up;
+        break;
       case 'processing':
         statusColor = AppColors.statusProcessing;
         statusText = 'En cours';
@@ -271,6 +281,15 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                             children: [Icon(Icons.play_arrow, size: 20), SizedBox(width: 8), Text('Commencer')],
                           )),
                         ],
+                        if (order.status == 'assigned') ...[
+                          PopupMenuItem(value: 'assign', child: Row(
+                            children: [Icon(Icons.swap_horiz, size: 20, color: Colors.amber), const SizedBox(width: 8), Text('Re-assigner', style: TextStyle(color: Colors.amber[800]))],
+                          )),
+                        ],
+                        if (order.status == 'en_cours')
+                          const PopupMenuItem(value: 'processing', child: Row(
+                            children: [Icon(Icons.play_arrow, size: 20), SizedBox(width: 8), Text('Commencer traitement')],
+                          )),
                         if (order.status == 'processing')
                           const PopupMenuItem(value: 'shipped', child: Row(
                             children: [Icon(Icons.local_shipping, size: 20), SizedBox(width: 8), Text('Expédier')],
@@ -323,11 +342,255 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
   }
 
   Future<void> _showAssignDialog(Order order, OrderProvider provider) async {
+    // Show loading while fetching recommendations
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    List<Map<String, dynamic>> recommendations = [];
+    try {
+      recommendations = await provider.getRecommendedLivreurs(order.id!);
+    } catch (_) {}
+
+    if (!mounted) return;
+    Navigator.pop(context); // dismiss loading
+
+    // Fallback: if recommendation API fails, fall back to basic livreur list
+    if (recommendations.isEmpty) {
+      await _showFallbackAssignDialog(order, provider);
+      return;
+    }
+
+    int? selectedLivreurId;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.recommend, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Assigner un livreur')),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Livreurs triés par proximité (collecte + livraison)',
+                  style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.45,
+                  ),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: recommendations.length,
+                    itemBuilder: (context, index) {
+                      final rec = recommendations[index];
+                      final livreurId = rec['livreurId'] as int?;
+                      final nom = rec['livreurNom'] ?? 'Livreur #$livreurId';
+                      final distance = (rec['distanceTotaleKm'] as num?)?.toDouble() ?? 0;
+                      final score = (rec['score'] as num?)?.toDouble() ?? 0;
+                      final activeOrders = rec['commandesActives'] as int? ?? 0;
+                      final tempsMinutes = (rec['tempsEstimeMinutes'] as num?)?.toDouble();
+                      final isRecommended = rec['recommended'] == true;
+                      final telephone = rec['telephone'] ?? '';
+                      final isSelected = selectedLivreurId == livreurId;
+
+                      return Card(
+                        elevation: isSelected ? 3 : 1,
+                        color: isSelected
+                            ? AppColors.primary.withOpacity(0.08)
+                            : isRecommended
+                                ? Colors.green.withOpacity(0.05)
+                                : null,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(
+                            color: isSelected
+                                ? AppColors.primary
+                                : isRecommended
+                                    ? AppColors.success.withOpacity(0.5)
+                                    : Colors.transparent,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () => setState(() => selectedLivreurId = livreurId),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                // Rank
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: isRecommended
+                                        ? AppColors.success
+                                        : AppColors.textSecondary.withOpacity(0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: TextStyle(
+                                        color: isRecommended ? Colors.white : AppColors.textPrimary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // Info
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              nom.toString(),
+                                              style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (isRecommended) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.success,
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Text(
+                                                'Recommandé',
+                                                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Icon(Icons.route, size: 14, color: AppColors.textSecondary),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${distance.toStringAsFixed(1)} km',
+                                            style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
+                                          ),
+                                          if (tempsMinutes != null) ...[
+                                            const SizedBox(width: 8),
+                                            Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              tempsMinutes < 60
+                                                  ? '${tempsMinutes.toStringAsFixed(0)} min'
+                                                  : '${(tempsMinutes / 60).toStringAsFixed(1)} h',
+                                              style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
+                                            ),
+                                          ],
+                                          const SizedBox(width: 8),
+                                          Icon(Icons.assignment, size: 14, color: AppColors.textSecondary),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '$activeOrders cmd active${activeOrders > 1 ? 's' : ''}',
+                                            style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
+                                          ),
+                                        ],
+                                      ),
+                                      if (telephone.toString().isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text(
+                                            telephone.toString(),
+                                            style: AppStyles.caption.copyWith(color: AppColors.textSecondary, fontSize: 11),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                // Score
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      'Score',
+                                      style: AppStyles.caption.copyWith(color: AppColors.textSecondary, fontSize: 10),
+                                    ),
+                                    Text(
+                                      score.toStringAsFixed(1),
+                                      style: AppStyles.bodyMedium.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: isRecommended ? AppColors.success : AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton.icon(
+              onPressed: selectedLivreurId == null
+                  ? null
+                  : () async {
+                      final success = await provider.assignOrderToLivreur(order.id!, selectedLivreurId!);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(success
+                                ? 'Commande proposée au livreur. En attente de sa réponse.'
+                                : 'Erreur: ${provider.errorMessage}'),
+                            backgroundColor: success ? AppColors.success : AppColors.error,
+                          ),
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.send, size: 18),
+              label: const Text('Proposer'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Fallback dialog when recommendation API is unavailable
+  Future<void> _showFallbackAssignDialog(Order order, OrderProvider provider) async {
     final livreurProvider = context.read<LivreurProvider>();
     if (livreurProvider.livreurs.isEmpty) {
       await livreurProvider.loadLivreurs();
     }
-
     if (!mounted) return;
 
     int? selectedLivreurId;

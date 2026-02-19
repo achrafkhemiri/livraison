@@ -105,6 +105,14 @@ public class Order {
     @Column(name = "date_collection")
     private LocalDateTime dateCollection;
     
+    // Livreur assignment workflow: proposed → accepted/rejected
+    @Column(name = "proposed_livreur_id")
+    private Long proposedLivreurId;
+    
+    @Column(name = "assignment_status", length = 20)
+    private String assignmentStatus;
+    // Values: null (not proposed), "proposed", "accepted", "rejected"
+    
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();

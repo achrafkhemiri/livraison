@@ -47,4 +47,7 @@ class ApiConstants {
   // Map & stock endpoints
   static const String mapData = '/map-data';
   static const String productsStock = '/products-stock';
+
+  // Notification endpoints
+  static const String notifications = '/notifications';
 }

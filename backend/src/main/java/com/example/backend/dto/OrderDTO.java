@@ -53,4 +53,9 @@ public class OrderDTO {
     private Boolean collected;
     private String collectionPlan;
     private LocalDateTime dateCollection;
+    
+    // Livreur assignment workflow
+    private Long proposedLivreurId;
+    private String proposedLivreurNom;
+    private String assignmentStatus; // null, "proposed", "accepted", "rejected"
 }

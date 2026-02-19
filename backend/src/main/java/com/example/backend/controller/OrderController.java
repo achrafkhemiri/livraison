@@ -110,6 +110,27 @@ public class OrderController {
         return ResponseEntity.ok(orderService.assignLivreur(id, livreurId));
     }
     
+    @PatchMapping("/{id}/accept")
+    @PreAuthorize("hasRole('LIVREUR')")
+    public ResponseEntity<OrderDTO> acceptAssignment(@PathVariable Long id) {
+        Long currentUserId = securityService.getCurrentUserId();
+        return ResponseEntity.ok(orderService.acceptAssignment(id, currentUserId));
+    }
+    
+    @PatchMapping("/{id}/reject")
+    @PreAuthorize("hasRole('LIVREUR')")
+    public ResponseEntity<OrderDTO> rejectAssignment(@PathVariable Long id) {
+        Long currentUserId = securityService.getCurrentUserId();
+        return ResponseEntity.ok(orderService.rejectAssignment(id, currentUserId));
+    }
+    
+    @GetMapping("/proposed")
+    @PreAuthorize("hasRole('LIVREUR')")
+    public ResponseEntity<List<OrderDTO>> getProposedOrders() {
+        Long currentUserId = securityService.getCurrentUserId();
+        return ResponseEntity.ok(orderService.findProposedOrdersForLivreur(currentUserId));
+    }
+    
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('GERANT')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {

@@ -6,8 +6,12 @@ import com.example.backend.exception.ResourceNotFoundException;
 import com.example.backend.model.*;
 import com.example.backend.repository.*;
 import com.example.backend.service.MapDataService;
+import com.example.backend.service.OsrmService;
 import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +25,8 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class MapDataServiceImpl implements MapDataService {
 
+    private static final Logger log = LoggerFactory.getLogger(MapDataServiceImpl.class);
+
     private final SocieteRepository societeRepository;
     private final MagasinRepository magasinRepository;
     private final DepotRepository depotRepository;
@@ -28,6 +34,10 @@ public class MapDataServiceImpl implements MapDataService {
     private final StockRepository stockRepository;
     private final OrderRepository orderRepository;
     private final ObjectMapper objectMapper;
+    private final OsrmService osrmService;
+
+    @Value("${osrm.workload-penalty-minutes:5}")
+    private double workloadPenaltyMinutes;
 
     @Override
     public MapDataDTO getMapData(Long societeId) {
@@ -463,28 +473,59 @@ public class MapDataServiceImpl implements MapDataService {
     }
 
     /**
-     * Estimate total route distance (haversine) for livreur → depot1 → depot2 → ... using nearest neighbor.
+     * Estimate total route distance for livreur → depot1 → depot2 → ... using nearest-neighbor.
+     * Uses OSRM /table API for real road durations; falls back to haversine if OSRM is unavailable.
+     * Returns a cost value (OSRM: seconds of travel time, haversine: km).
      */
     private double estimateRouteDistance(List<Long> depotIds, Map<Long, Depot> depotMap,
                                          Double livreurLat, Double livreurLon) {
         if (depotIds.isEmpty()) return 0;
         if (livreurLat == null || livreurLon == null) {
-            // No livreur position: just sum pairwise distances in given order
-            return depotIds.size(); // fallback: prefer fewer depots
+            return depotIds.size(); // prefer fewer depots when no position
         }
 
-        // Nearest-neighbor ordering from livreur
-        List<double[]> points = new ArrayList<>();
+        // Build coordinate list: index 0 = livreur, 1..N = depots
+        List<double[]> coords = new ArrayList<>();
+        coords.add(new double[]{livreurLat, livreurLon});
+        List<Integer> validDepotIndices = new ArrayList<>();
         for (Long id : depotIds) {
             Depot d = depotMap.get(id);
             if (d != null && d.getLatitude() != null && d.getLongitude() != null) {
-                points.add(new double[]{d.getLatitude(), d.getLongitude()});
+                coords.add(new double[]{d.getLatitude(), d.getLongitude()});
+                validDepotIndices.add(coords.size() - 1);
             }
         }
-        if (points.isEmpty()) return Double.MAX_VALUE;
+        if (validDepotIndices.isEmpty()) return Double.MAX_VALUE;
 
+        // --- Try OSRM /table first ---
+        OsrmService.TableResult table = osrmService.getTable(coords);
+        if (table != null && table.durations() != null) {
+            // nearest-neighbor on the OSRM duration matrix
+            double totalCost = 0;
+            int cur = 0; // start at livreur (index 0)
+            boolean[] visited = new boolean[coords.size()];
+            visited[0] = true;
+
+            for (int i = 0; i < validDepotIndices.size(); i++) {
+                double minD = Double.MAX_VALUE;
+                int nearest = validDepotIndices.get(0);
+                for (int idx : validDepotIndices) {
+                    if (visited[idx]) continue;
+                    double d = table.durations()[cur][idx];
+                    if (d < minD) { minD = d; nearest = idx; }
+                }
+                visited[nearest] = true;
+                totalCost += minD;
+                cur = nearest;
+            }
+            return totalCost; // seconds
+        }
+
+        // --- Haversine fallback ---
+        log.debug("OSRM /table unavailable, falling back to haversine for estimateRouteDistance");
         double totalDist = 0;
         double curLat = livreurLat, curLon = livreurLon;
+        List<double[]> points = coords.subList(1, coords.size()); // skip livreur
         boolean[] visited = new boolean[points.size()];
 
         for (int i = 0; i < points.size(); i++) {
@@ -652,12 +693,45 @@ public class MapDataServiceImpl implements MapDataService {
     }
 
     /**
-     * Order steps by nearest-neighbor starting from livreur position.
+     * Order steps by optimal route from livreur position.
+     * Uses OSRM /trip (TSP) API; falls back to haversine nearest-neighbor.
      */
     private List<Map<String, Object>> orderStepsByNearest(List<Map<String, Object>> steps,
                                                            Double livreurLat, Double livreurLon) {
         if (steps.size() <= 1 || livreurLat == null || livreurLon == null) return steps;
 
+        // Build coordinate list: index 0 = livreur, 1..N = depots
+        List<double[]> coords = new ArrayList<>();
+        coords.add(new double[]{livreurLat, livreurLon});
+        for (Map<String, Object> step : steps) {
+            Double lat = (Double) step.get("depotLatitude");
+            Double lon = (Double) step.get("depotLongitude");
+            coords.add(new double[]{
+                lat != null ? lat : 0,
+                lon != null ? lon : 0
+            });
+        }
+
+        // --- Try OSRM /trip (TSP) first ---
+        OsrmService.TripResult trip = osrmService.getTrip(coords, false);
+        if (trip != null && trip.waypointOrder() != null) {
+            // trip returns ordered indices into coords (includes index 0 = livreur)
+            List<Map<String, Object>> ordered = new ArrayList<>();
+            for (int idx : trip.waypointOrder()) {
+                if (idx == 0) continue; // skip livreur waypoint
+                int stepIdx = idx - 1;  // map back to steps index
+                if (stepIdx >= 0 && stepIdx < steps.size()) {
+                    ordered.add(steps.get(stepIdx));
+                }
+            }
+            // If OSRM returned all steps, use that order
+            if (ordered.size() == steps.size()) {
+                return ordered;
+            }
+        }
+
+        // --- Haversine nearest-neighbor fallback ---
+        log.debug("OSRM /trip unavailable, falling back to haversine for orderStepsByNearest");
         List<Map<String, Object>> ordered = new ArrayList<>();
         boolean[] used = new boolean[steps.size()];
         double curLat = livreurLat, curLon = livreurLon;
@@ -693,5 +767,140 @@ public class MapDataServiceImpl implements MapDataService {
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                 * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // =========================================================================
+    //  LIVREUR RECOMMENDATION: rank livreurs by OSRM travel time (or haversine fallback)
+    // =========================================================================
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> recommendLivreursForOrder(Long orderId, Long societeId) {
+        // 1. Get the order
+        Order order = orderRepository.findByIdWithItems(orderId).orElse(null);
+        if (order == null) return List.of();
+
+        // 2. Get the collection plan for this order (what depots to visit)
+        List<double[]> collectionPoints = new ArrayList<>();
+        if (order.getCollectionPlan() != null && !order.getCollectionPlan().isBlank()) {
+            try {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> steps = objectMapper.readValue(
+                        order.getCollectionPlan(),
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class));
+                for (Map<String, Object> step : steps) {
+                    Number lat = (Number) step.get("depotLatitude");
+                    Number lon = (Number) step.get("depotLongitude");
+                    if (lat != null && lon != null) {
+                        collectionPoints.add(new double[]{lat.doubleValue(), lon.doubleValue()});
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore parse errors
+            }
+        }
+
+        // If no collection plan yet, generate one to know which depots
+        if (collectionPoints.isEmpty()) {
+            try {
+                Map<String, Object> plan = generateCollectionPlan(orderId, societeId);
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> steps = (List<Map<String, Object>>) plan.getOrDefault("collectionSteps", new ArrayList<>());
+                for (Map<String, Object> step : steps) {
+                    Number lat = (Number) step.get("depotLatitude");
+                    Number lon = (Number) step.get("depotLongitude");
+                    if (lat != null && lon != null) {
+                        collectionPoints.add(new double[]{lat.doubleValue(), lon.doubleValue()});
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
+
+        // 3. Delivery point
+        Double deliveryLat = order.getLatitudeLivraison();
+        Double deliveryLon = order.getLongitudeLivraison();
+
+        // 4. Get all active livreurs with known position
+        List<Utilisateur> livreurs = utilisateurRepository.findLivreursWithPositionBySocieteId(societeId);
+
+        // 5. Score each livreur: OSRM route travel time (livreur → depots → delivery)
+        //    Falls back to haversine distance if OSRM is unavailable
+        List<Map<String, Object>> ranked = new ArrayList<>();
+        for (Utilisateur livreur : livreurs) {
+            double livreurLat = livreur.getLatitude();
+            double livreurLon = livreur.getLongitude();
+
+            // Build ordered coordinate sequence: livreur → depot1 → ... → depotN → delivery
+            List<double[]> routeCoords = new ArrayList<>();
+            routeCoords.add(new double[]{livreurLat, livreurLon});
+            routeCoords.addAll(collectionPoints);
+            if (deliveryLat != null && deliveryLon != null) {
+                routeCoords.add(new double[]{deliveryLat, deliveryLon});
+            }
+
+            double totalTimeMinutes = -1;
+            double totalDistanceKm = -1;
+
+            // --- Try OSRM /route first ---
+            if (routeCoords.size() >= 2) {
+                OsrmService.RouteResult route = osrmService.getRoute(routeCoords);
+                if (route != null) {
+                    totalTimeMinutes = route.totalDurationSeconds() / 60.0;
+                    totalDistanceKm = route.totalDistanceMeters() / 1000.0;
+                }
+            }
+
+            // --- Haversine fallback ---
+            if (totalTimeMinutes < 0) {
+                double totalHaversineKm = 0;
+                double curLat = livreurLat, curLon = livreurLon;
+                for (double[] pt : collectionPoints) {
+                    totalHaversineKm += haversine(curLat, curLon, pt[0], pt[1]);
+                    curLat = pt[0];
+                    curLon = pt[1];
+                }
+                if (deliveryLat != null && deliveryLon != null) {
+                    totalHaversineKm += haversine(curLat, curLon, deliveryLat, deliveryLon);
+                }
+                totalDistanceKm = totalHaversineKm;
+                // Rough estimate: 30 km/h average in Tunisia urban areas
+                totalTimeMinutes = (totalHaversineKm / 30.0) * 60.0;
+            }
+
+            // Count current active orders for this livreur (workload)
+            long activeOrderCount = orderRepository.findByLivreurIdAndStatusIn(
+                    livreur.getId(), List.of("en_cours", "processing", "shipped", "assigned")
+            ).size();
+
+            // Score: travel time in minutes + workload penalty
+            double score = totalTimeMinutes + (activeOrderCount * workloadPenaltyMinutes);
+
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("livreurId", livreur.getId());
+            entry.put("livreurNom", (livreur.getNom() + " " + livreur.getPrenom()).trim());
+            entry.put("livreurLatitude", livreur.getLatitude());
+            entry.put("livreurLongitude", livreur.getLongitude());
+            entry.put("dernierePositionAt", livreur.getDernierePositionAt() != null ? livreur.getDernierePositionAt().toString() : null);
+            entry.put("distanceTotaleKm", Math.round(totalDistanceKm * 100.0) / 100.0);
+            entry.put("tempsEstimeMinutes", Math.round(totalTimeMinutes * 10.0) / 10.0);
+            entry.put("commandesActives", activeOrderCount);
+            entry.put("score", Math.round(score * 10.0) / 10.0);
+            entry.put("telephone", livreur.getTelephone());
+
+            ranked.add(entry);
+        }
+
+        // Sort by score (ascending = best first)
+        ranked.sort((a, b) -> Double.compare(((Number) a.get("score")).doubleValue(), ((Number) b.get("score")).doubleValue()));
+
+        // Add rank
+        for (int i = 0; i < ranked.size(); i++) {
+            ranked.get(i).put("rang", i + 1);
+            ranked.get(i).put("recommended", i == 0);
+        }
+
+        return ranked;
     }
 }

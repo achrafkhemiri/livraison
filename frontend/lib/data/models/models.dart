@@ -7,3 +7,4 @@ export 'produit.dart';
 export 'stock.dart';
 export 'client.dart';
 export 'order.dart';
+export 'notification.dart';

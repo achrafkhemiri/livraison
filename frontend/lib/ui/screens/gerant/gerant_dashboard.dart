@@ -24,12 +24,16 @@ class _GerantDashboardState extends State<GerantDashboard> {
     final societeProvider = context.read<SocieteProvider>();
     final orderProvider = context.read<OrderProvider>();
     final livreurProvider = context.read<LivreurProvider>();
+    final notifProvider = context.read<NotificationProvider>();
 
     await Future.wait([
       societeProvider.loadSocietes(),
       orderProvider.loadOrders(),
       livreurProvider.loadLivreurs(),
     ]);
+
+    // Start notification polling for admin
+    notifProvider.startPolling(seconds: 15);
   }
 
   @override
@@ -65,10 +69,32 @@ class _GerantDashboardState extends State<GerantDashboard> {
           },
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-            onPressed: () {
-              // TODO: Show notifications
+          Consumer<NotificationProvider>(
+            builder: (context, notifProvider, _) {
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                    onPressed: () => _openNotifications(),
+                  ),
+                  if (notifProvider.unreadCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '${notifProvider.unreadCount}',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                ],
+              );
             },
           ),
           PopupMenuButton<String>(
@@ -554,6 +580,110 @@ class _GerantDashboardState extends State<GerantDashboard> {
           BottomNavigationBarItem(icon: Icon(Icons.delivery_dining), label: 'Livreurs'),
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Carte'),
         ],
+      ),
+    );
+  }
+
+  void _openNotifications() {
+    final notifProvider = context.read<NotificationProvider>();
+    notifProvider.loadAll();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.3,
+        expand: false,
+        builder: (ctx, scrollController) => Consumer<NotificationProvider>(
+          builder: (ctx, provider, _) {
+            if (provider.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Notifications', style: AppStyles.headingSmall),
+                      if (provider.unreadCount > 0)
+                        TextButton(
+                          onPressed: () => provider.markAllAsRead(),
+                          child: const Text('Tout marquer lu'),
+                        ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: provider.notifications.isEmpty
+                      ? Center(
+                          child: Text('Aucune notification',
+                              style: AppStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+                        )
+                      : ListView.builder(
+                          controller: scrollController,
+                          itemCount: provider.notifications.length,
+                          itemBuilder: (ctx, i) {
+                            final notif = provider.notifications[i];
+                            return ListTile(
+                              leading: Icon(
+                                notif.type == 'ORDER_PROPOSED'
+                                    ? Icons.assignment_ind
+                                    : notif.type == 'ORDER_ACCEPTED'
+                                        ? Icons.check_circle
+                                        : notif.type == 'ORDER_REJECTED'
+                                            ? Icons.cancel
+                                            : notif.type == 'ORDER_ASSIGNED'
+                                                ? Icons.person_add
+                                                : Icons.notifications,
+                                color: notif.isRead
+                                    ? AppColors.textSecondary
+                                    : notif.type == 'ORDER_ACCEPTED'
+                                        ? AppColors.success
+                                        : notif.type == 'ORDER_REJECTED'
+                                            ? AppColors.error
+                                            : AppColors.primary,
+                              ),
+                              title: Text(
+                                notif.typeLabel,
+                                style: AppStyles.bodyMedium.copyWith(
+                                  fontWeight: notif.isRead ? FontWeight.normal : FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(notif.message ?? '', style: AppStyles.caption),
+                              trailing: notif.isRead
+                                  ? null
+                                  : Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                              onTap: () {
+                                if (!notif.isRead && notif.id != null) {
+                                  provider.markAsRead(notif.id!);
+                                }
+                                // If it's about an order, reload orders to show latest status
+                                if (notif.orderId != null) {
+                                  context.read<OrderProvider>().loadOrders();
+                                }
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

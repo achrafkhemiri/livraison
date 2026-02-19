@@ -104,4 +104,18 @@ public class MapDataController {
         }
         return ResponseEntity.ok(orderService.markAsCollected(orderId));
     }
+
+    /**
+     * Recommend livreurs for an order, ranked by proximity to collection depots + delivery.
+     * Returns a sorted list with distance, workload, and overall score.
+     */
+    @GetMapping("/orders/{orderId}/recommend-livreurs")
+    @PreAuthorize("hasRole('GERANT')")
+    public ResponseEntity<List<Map<String, Object>>> recommendLivreurs(@PathVariable Long orderId) {
+        Long societeId = securityService.getCurrentUserSocieteId();
+        if (societeId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        return ResponseEntity.ok(mapDataService.recommendLivreursForOrder(orderId, societeId));
+    }
 }

@@ -5,3 +5,4 @@ export 'depot_provider.dart';
 export 'order_provider.dart';
 export 'livreur_provider.dart';
 export 'delivery_route_provider.dart';
+export 'notification_provider.dart';

@@ -60,6 +60,7 @@ class SmartDeliveryApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => OrderProvider()),
         ChangeNotifierProvider(create: (_) => LivreurProvider()),
         ChangeNotifierProvider(create: (_) => DeliveryRouteProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
       child: MaterialApp(
         title: 'Smart Delivery',

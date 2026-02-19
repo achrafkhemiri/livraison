@@ -3,7 +3,9 @@ package com.example.backend.mapper;
 import com.example.backend.dto.OrderDTO;
 import com.example.backend.dto.OrderItemDTO;
 import com.example.backend.model.Order;
+import com.example.backend.model.Utilisateur;
 import com.example.backend.model.User;
+import com.example.backend.repository.UtilisateurRepository;
 import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -15,6 +17,9 @@ public class OrderMapper {
     
     @Autowired
     private OrderItemMapper orderItemMapper;
+    
+    @Autowired
+    private UtilisateurRepository utilisateurRepository;
     
     public OrderDTO toDTO(Order order) {
         if (order == null) return null;
@@ -38,6 +43,8 @@ public class OrderMapper {
                 .collected(order.getCollected())
                 .collectionPlan(order.getCollectionPlan())
                 .dateCollection(order.getDateCollection())
+                .proposedLivreurId(order.getProposedLivreurId())
+                .assignmentStatus(order.getAssignmentStatus())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt());
         
@@ -96,6 +103,19 @@ public class OrderMapper {
             String nom = order.getLivreur().getNom() != null ? order.getLivreur().getNom() : "";
             String prenom = order.getLivreur().getPrenom() != null ? order.getLivreur().getPrenom() : "";
             builder.livreurNom((nom + " " + prenom).trim());
+        }
+        
+        // Resolve proposed livreur name
+        if (order.getProposedLivreurId() != null) {
+            try {
+                utilisateurRepository.findById(order.getProposedLivreurId()).ifPresent(u -> {
+                    String pNom = u.getNom() != null ? u.getNom() : "";
+                    String pPrenom = u.getPrenom() != null ? u.getPrenom() : "";
+                    builder.proposedLivreurNom((pNom + " " + pPrenom).trim());
+                });
+            } catch (Exception e) {
+                // Ignore
+            }
         }
         
         if (order.getDepot() != null) {

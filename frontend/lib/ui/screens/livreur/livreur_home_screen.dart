@@ -21,7 +21,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _initializeData();
   }
 
@@ -37,10 +37,16 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
       await Future.wait([
         orderProvider.loadOrdersForLivreur(authProvider.user!.id!),
         orderProvider.loadPendingOrdersForLivreur(authProvider.user!.id!),
+        orderProvider.loadProposedOrders(),
       ]);
       
       // Start position tracking
       await livreurProvider.startPositionTracking();
+
+      // Start notification polling
+      if (mounted) {
+        context.read<NotificationProvider>().startPolling(seconds: 15);
+      }
     }
   }
 
@@ -48,6 +54,98 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _openNotifications() {
+    final notifProvider = context.read<NotificationProvider>();
+    notifProvider.loadAll();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.3,
+        expand: false,
+        builder: (ctx, scrollController) => Consumer<NotificationProvider>(
+          builder: (ctx, provider, _) {
+            if (provider.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Notifications', style: AppStyles.headingSmall),
+                      if (provider.unreadCount > 0)
+                        TextButton(
+                          onPressed: () => provider.markAllAsRead(),
+                          child: const Text('Tout marquer lu'),
+                        ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: provider.notifications.isEmpty
+                      ? Center(
+                          child: Text('Aucune notification',
+                              style: AppStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+                        )
+                      : ListView.builder(
+                          controller: scrollController,
+                          itemCount: provider.notifications.length,
+                          itemBuilder: (ctx, i) {
+                            final notif = provider.notifications[i];
+                            return ListTile(
+                              leading: Icon(
+                                notif.type == 'ORDER_PROPOSED'
+                                    ? Icons.assignment_ind
+                                    : notif.type == 'ORDER_ACCEPTED'
+                                        ? Icons.check_circle
+                                        : notif.type == 'ORDER_REJECTED'
+                                            ? Icons.cancel
+                                            : Icons.notifications,
+                                color: notif.isRead ? AppColors.textSecondary : AppColors.primary,
+                              ),
+                              title: Text(
+                                notif.typeLabel,
+                                style: AppStyles.bodyMedium.copyWith(
+                                  fontWeight: notif.isRead ? FontWeight.normal : FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(notif.message ?? '', style: AppStyles.caption),
+                              trailing: notif.isRead
+                                  ? null
+                                  : Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                              onTap: () {
+                                if (!notif.isRead && notif.id != null) {
+                                  provider.markAsRead(notif.id!);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -68,6 +166,36 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
           ],
         ),
         actions: [
+          // Notification bell
+          Consumer<NotificationProvider>(
+            builder: (context, notifProvider, _) {
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                    onPressed: _openNotifications,
+                    tooltip: 'Notifications',
+                  ),
+                  if (notifProvider.unreadCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '${notifProvider.unreadCount}',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           // Position status indicator
           Consumer<LivreurProvider>(
             builder: (context, provider, _) {
@@ -120,10 +248,23 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
-          tabs: const [
-            Tab(text: 'À collecter', icon: Icon(Icons.inventory_2)),
-            Tab(text: 'À livrer', icon: Icon(Icons.local_shipping)),
-            Tab(text: 'Disponibles', icon: Icon(Icons.pending_actions)),
+          tabs: [
+            const Tab(text: 'À collecter', icon: Icon(Icons.inventory_2)),
+            const Tab(text: 'À livrer', icon: Icon(Icons.local_shipping)),
+            Tab(
+              icon: Consumer<OrderProvider>(
+                builder: (context, p, _) {
+                  final count = p.proposedOrders.length;
+                  return Badge(
+                    isLabelVisible: count > 0,
+                    label: Text('$count'),
+                    child: const Icon(Icons.assignment_ind),
+                  );
+                },
+              ),
+              text: 'Proposées',
+            ),
+            const Tab(text: 'Disponibles', icon: Icon(Icons.pending_actions)),
           ],
         ),
       ),
@@ -132,6 +273,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
         children: [
           _buildCollectTab(),
           _buildDeliverTab(),
+          _buildProposedOrdersTab(),
           _buildPendingOrdersTab(),
         ],
       ),
@@ -350,6 +492,190 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
+  Widget _buildProposedOrdersTab() {
+    return Consumer<OrderProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (provider.proposedOrders.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inbox_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
+                const SizedBox(height: 16),
+                Text('Aucune commande proposée',
+                    style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
+                const SizedBox(height: 8),
+                Text('Les commandes assignées par l\'admin apparaîtront ici',
+                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            await provider.loadProposedOrders();
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: provider.proposedOrders.length,
+            itemBuilder: (context, index) {
+              final order = provider.proposedOrders[index];
+              return _buildProposedOrderCard(order, provider);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProposedOrderCard(Order order, OrderProvider provider) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 3,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.amber.withOpacity(0.5), width: 1.5),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.assignment_ind, color: Colors.amber),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Commande #${order.id}',
+                            style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'En attente de votre réponse',
+                              style: AppStyles.caption.copyWith(color: Colors.amber[800], fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  if (order.montantTTC != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${order.montantTTC!.toStringAsFixed(2)}',
+                          style: AppStyles.headingSmall.copyWith(color: AppColors.primary),
+                        ),
+                        Text('TND', style: AppStyles.caption.copyWith(color: AppColors.textSecondary)),
+                      ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Client & date info
+              Row(
+                children: [
+                  const Icon(Icons.person_outline, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(order.clientNom ?? 'Client #${order.clientId ?? "N/A"}',
+                      style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                  const SizedBox(width: 16),
+                  const Icon(Icons.access_time, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(order.dateCommande?.toString().substring(0, 10) ?? '',
+                      style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                ],
+              ),
+              if (order.adresseLivraison != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 16, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(order.adresseLivraison!,
+                          style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+              ],
+              // Items summary
+              if (order.items != null && order.items!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('${order.items!.length} article(s)',
+                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+              ],
+              const SizedBox(height: 16),
+              // Accept / Reject buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _rejectOrder(order, provider),
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Refuser'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _acceptOrder(order, provider),
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Accepter'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPendingOrdersTab() {
     return Consumer<OrderProvider>(
       builder: (context, provider, _) {
@@ -398,6 +724,14 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
       case 'pending':
         statusColor = AppColors.statusPending;
         statusText = 'En attente';
+        break;
+      case 'assigned':
+        statusColor = Colors.amber;
+        statusText = 'Proposée';
+        break;
+      case 'en_cours':
+        statusColor = AppColors.statusProcessing;
+        statusText = 'Acceptée';
         break;
       case 'processing':
         statusColor = AppColors.statusProcessing;
@@ -786,14 +1120,47 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Commande acceptée' : 'Erreur'),
+            content: Text(success ? 'Commande acceptée ! Elle apparaît dans vos livraisons.' : 'Erreur: ${provider.errorMessage}'),
             backgroundColor: success ? AppColors.success : AppColors.error,
           ),
         );
         if (success) {
           await provider.loadOrdersForLivreur(auth.user!.id!);
-          await provider.loadPendingOrdersForLivreur(auth.user!.id!);
+          await provider.loadProposedOrders();
         }
+      }
+    }
+  }
+
+  Future<void> _rejectOrder(Order order, OrderProvider provider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Refuser la commande'),
+        content: Text('Êtes-vous sûr de vouloir refuser la commande #${order.id} ?\n\nL\'admin sera notifié et pourra proposer un autre livreur.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Refuser', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final success = await provider.rejectOrder(order.id!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Commande refusée' : 'Erreur: ${provider.errorMessage}'),
+            backgroundColor: success ? Colors.orange : AppColors.error,
+          ),
+        );
       }
     }
   }

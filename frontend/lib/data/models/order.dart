@@ -29,6 +29,9 @@ class Order {
   final bool? collected;
   final String? collectionPlan;
   final DateTime? dateCollection;
+  final int? proposedLivreurId;
+  final String? proposedLivreurNom;
+  final String? assignmentStatus; // null, "proposed", "accepted", "rejected"
 
   Order({
     this.id,
@@ -61,6 +64,9 @@ class Order {
     this.collected,
     this.collectionPlan,
     this.dateCollection,
+    this.proposedLivreurId,
+    this.proposedLivreurNom,
+    this.assignmentStatus,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -97,6 +103,9 @@ class Order {
       collected: json['collected'],
       collectionPlan: json['collectionPlan'],
       dateCollection: json['dateCollection'] != null ? DateTime.parse(json['dateCollection']) : null,
+      proposedLivreurId: json['proposedLivreurId'],
+      proposedLivreurNom: json['proposedLivreurNom'],
+      assignmentStatus: json['assignmentStatus'],
     );
   }
 
@@ -119,14 +128,19 @@ class Order {
 
   // Status helpers
   bool get isPending => status == 'pending';
+  bool get isAssigned => status == 'assigned';
+  bool get isEnCours => status == 'en_cours';
   bool get isProcessing => status == 'processing';
   bool get isShipped => status == 'shipped';
   bool get isDelivered => status == 'delivered';
   bool get isCancelled => status == 'cancelled';
+  bool get isProposed => assignmentStatus == 'proposed';
   
   String get statusLabel {
     switch (status) {
       case 'pending': return 'En attente';
+      case 'assigned': return 'Proposée';
+      case 'en_cours': return 'En cours';
       case 'processing': return 'En traitement';
       case 'shipped': return 'En livraison';
       case 'delivered': return 'Livrée';
@@ -159,6 +173,9 @@ class Order {
     bool? collected,
     String? collectionPlan,
     DateTime? dateCollection,
+    int? proposedLivreurId,
+    String? proposedLivreurNom,
+    String? assignmentStatus,
   }) {
     return Order(
       id: id ?? this.id,
@@ -191,6 +208,9 @@ class Order {
       collected: collected ?? this.collected,
       collectionPlan: collectionPlan ?? this.collectionPlan,
       dateCollection: dateCollection ?? this.dateCollection,
+      proposedLivreurId: proposedLivreurId ?? this.proposedLivreurId,
+      proposedLivreurNom: proposedLivreurNom ?? this.proposedLivreurNom,
+      assignmentStatus: assignmentStatus ?? this.assignmentStatus,
     );
   }
 }

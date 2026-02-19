@@ -7,6 +7,7 @@ import com.example.backend.exception.ResourceNotFoundException;
 import com.example.backend.mapper.OrderMapper;
 import com.example.backend.model.*;
 import com.example.backend.repository.*;
+import com.example.backend.service.NotificationService;
 import com.example.backend.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class OrderServiceImpl implements OrderService {
     private final DepotRepository depotRepository;
     private final ProduitRepository produitRepository;
     private final OrderMapper orderMapper;
+    private final NotificationService notificationService;
     
     @Override
     @Transactional(readOnly = true)
@@ -235,11 +237,133 @@ public class OrderServiceImpl implements OrderService {
             throw new BadRequestException("L'utilisateur n'est pas un livreur");
         }
         
+        // Set the order as proposed to this livreur (not yet accepted)
+        order.setProposedLivreurId(livreurId);
+        order.setAssignmentStatus("proposed");
+        order.setStatus("assigned");
+        order = orderRepository.save(order);
+        
+        // Notify the livreur about the proposed order
+        String livreurName = (livreur.getNom() + " " + livreur.getPrenom()).trim();
+        notificationService.create(
+                livreurId,
+                "ORDER_PROPOSED",
+                "La commande #" + order.getNumero() + " vous a été proposée. Veuillez accepter ou refuser.",
+                orderId,
+                livreurId
+        );
+        
+        // Notify all gérants of this societe about the assignment
+        if (order.getSocieteId() != null) {
+            List<Utilisateur> gerants = utilisateurRepository.findByRoleAndActifTrue(Role.GERANT);
+            for (Utilisateur gerant : gerants) {
+                if (gerant.getSociete() != null && gerant.getSociete().getId().equals(order.getSocieteId())) {
+                    notificationService.create(
+                            gerant.getId(),
+                            "ORDER_ASSIGNED",
+                            "Commande #" + order.getNumero() + " proposée à " + livreurName + ". En attente de réponse.",
+                            orderId,
+                            livreurId
+                    );
+                }
+            }
+        }
+        
+        return orderMapper.toDTO(order);
+    }
+    
+    @Override
+    public OrderDTO acceptAssignment(Long orderId, Long livreurId) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Commande", "id", orderId));
+        
+        // Verify this livreur is the one the order was proposed to
+        if (order.getProposedLivreurId() == null || !order.getProposedLivreurId().equals(livreurId)) {
+            throw new BadRequestException("Cette commande ne vous a pas été proposée");
+        }
+        if (!"proposed".equals(order.getAssignmentStatus())) {
+            throw new BadRequestException("Cette commande n'est plus en attente d'acceptation");
+        }
+        
+        Utilisateur livreur = utilisateurRepository.findById(livreurId)
+                .orElseThrow(() -> new ResourceNotFoundException("Livreur", "id", livreurId));
+        
+        // Livreur officially accepts → assign and move to en_cours
         order.setLivreur(livreur);
-        // Update status to 'en_cours' when livreur accepts
+        order.setAssignmentStatus("accepted");
         order.setStatus("en_cours");
         order = orderRepository.save(order);
+        
+        // Notify all gérants
+        String livreurName = (livreur.getNom() + " " + livreur.getPrenom()).trim();
+        if (order.getSocieteId() != null) {
+            List<Utilisateur> gerants = utilisateurRepository.findByRoleAndActifTrue(Role.GERANT);
+            for (Utilisateur gerant : gerants) {
+                if (gerant.getSociete() != null && gerant.getSociete().getId().equals(order.getSocieteId())) {
+                    notificationService.create(
+                            gerant.getId(),
+                            "ORDER_ACCEPTED",
+                            livreurName + " a accepté la commande #" + order.getNumero() + ".",
+                            orderId,
+                            livreurId
+                    );
+                }
+            }
+        }
+        
         return orderMapper.toDTO(order);
+    }
+    
+    @Override
+    public OrderDTO rejectAssignment(Long orderId, Long livreurId) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Commande", "id", orderId));
+        
+        // Verify this livreur is the one the order was proposed to
+        if (order.getProposedLivreurId() == null || !order.getProposedLivreurId().equals(livreurId)) {
+            throw new BadRequestException("Cette commande ne vous a pas été proposée");
+        }
+        if (!"proposed".equals(order.getAssignmentStatus())) {
+            throw new BadRequestException("Cette commande n'est plus en attente d'acceptation");
+        }
+        
+        Utilisateur livreur = utilisateurRepository.findById(livreurId)
+                .orElseThrow(() -> new ResourceNotFoundException("Livreur", "id", livreurId));
+        
+        // Livreur rejects → reset so admin can re-assign
+        order.setAssignmentStatus("rejected");
+        order.setStatus("pending");
+        order.setProposedLivreurId(null);
+        // Don't set livreur — leave it null so admin can re-propose
+        order.setLivreur(null);
+        order = orderRepository.save(order);
+        
+        // Notify all gérants
+        String livreurName = (livreur.getNom() + " " + livreur.getPrenom()).trim();
+        if (order.getSocieteId() != null) {
+            List<Utilisateur> gerants = utilisateurRepository.findByRoleAndActifTrue(Role.GERANT);
+            for (Utilisateur gerant : gerants) {
+                if (gerant.getSociete() != null && gerant.getSociete().getId().equals(order.getSocieteId())) {
+                    notificationService.create(
+                            gerant.getId(),
+                            "ORDER_REJECTED",
+                            livreurName + " a refusé la commande #" + order.getNumero() + ". Veuillez réassigner.",
+                            orderId,
+                            livreurId
+                    );
+                }
+            }
+        }
+        
+        return orderMapper.toDTO(order);
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderDTO> findProposedOrdersForLivreur(Long livreurId) {
+        return orderRepository.findProposedOrdersForLivreur(livreurId).stream()
+                .map(orderMapper::toDTO)
+                .collect(Collectors.toList());
     }
     
     @Override

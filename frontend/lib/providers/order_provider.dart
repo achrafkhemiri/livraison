@@ -8,6 +8,7 @@ class OrderProvider extends ChangeNotifier {
   List<Order> _orders = [];
   List<Order> _pendingOrders = [];
   List<Order> _myOrders = []; // Orders assigned to current livreur
+  List<Order> _proposedOrders = []; // Orders proposed to current livreur (awaiting accept/reject)
   Order? _selectedOrder;
   bool _isLoading = false;
   String? _errorMessage;
@@ -20,6 +21,7 @@ class OrderProvider extends ChangeNotifier {
   List<Order> get orders => _orders;
   List<Order> get pendingOrders => _pendingOrders;
   List<Order> get myOrders => _myOrders;
+  List<Order> get proposedOrders => _proposedOrders;
   Order? get selectedOrder => _selectedOrder;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -198,9 +200,73 @@ class OrderProvider extends ChangeNotifier {
     }
   }
   
-  // Accept order (for livreur)
+  // Accept order (for livreur) — new assignment workflow
   Future<bool> acceptOrder(int orderId, int livreurId) async {
-    return await assignOrderToLivreur(orderId, livreurId);
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final updated = await _service.acceptAssignment(orderId);
+      _updateOrderInLists(orderId, updated);
+      // Move from proposed to myOrders
+      _proposedOrders.removeWhere((o) => o.id == orderId);
+      if (!_myOrders.any((o) => o.id == orderId)) {
+        _myOrders.add(updated);
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Reject proposed order (for livreur)
+  Future<bool> rejectOrder(int orderId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _service.rejectAssignment(orderId);
+      _proposedOrders.removeWhere((o) => o.id == orderId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Load orders proposed to current livreur
+  Future<void> loadProposedOrders() async {
+    try {
+      _proposedOrders = await _service.getProposedOrders();
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // Get recommended livreurs for an order (admin)
+  Future<List<Map<String, dynamic>>> getRecommendedLivreurs(int orderId) async {
+    try {
+      return await _service.recommendLivreurs(orderId);
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return [];
+    }
   }
   
   // Mark order as delivered
@@ -279,10 +345,10 @@ class OrderProvider extends ChangeNotifier {
     return _orders.where((o) => o.clientId == clientId).toList();
   }
   
-  // Get active orders (not delivered or cancelled)
+  // Get active orders (accepted / not delivered or cancelled)
   List<Order> get activeOrders {
     return _myOrders.where((o) => 
-      o.status != 'delivered' && o.status != 'cancelled' && o.status != 'done'
+      o.status != 'delivered' && o.status != 'cancelled' && o.status != 'done' && o.status != 'assigned'
     ).toList();
   }
 

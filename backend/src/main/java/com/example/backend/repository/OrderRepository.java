@@ -62,4 +62,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // Batch load multiple orders by IDs with items
     @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.produit LEFT JOIN FETCH o.user WHERE o.id IN :ids")
     List<Order> findByIdsWithItems(@Param("ids") List<Long> ids);
+    
+    // Find orders proposed (assigned but not yet accepted) for a livreur
+    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.produit LEFT JOIN FETCH o.user WHERE o.proposedLivreurId = :livreurId AND o.assignmentStatus = 'proposed'")
+    List<Order> findProposedOrdersForLivreur(@Param("livreurId") Long livreurId);
 }
