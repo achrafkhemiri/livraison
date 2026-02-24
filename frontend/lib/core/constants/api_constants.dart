@@ -1,17 +1,22 @@
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiConstants {
-  // IP locale de votre ordinateur (changer si nécessaire)
-  static const String _localIp = '192.168.100.53';
-  
-  // Use localhost for web, local IP for physical phone
-  static String get baseUrl => kIsWeb 
-      ? 'http://localhost:8080/api' 
-      : 'http://$_localIp:8080/api';
-  
-  static String get osrmUrl => kIsWeb 
-      ? 'http://localhost:5000' 
-      : 'http://$_localIp:5000';
+  // IP locale de votre ordinateur (mettez à jour si votre IP change)
+  // Actuellement la machine a l'IP 192.168.1.16 — remplacez si nécessaire.
+  static const String _localIp = '192.168.1.16';
+
+  static String get _host {
+    if (kIsWeb) return 'localhost';
+    // For a physical Android device on the same Wi‑Fi, use the host machine LAN IP.
+    // If you use an Android emulator, set the host to 10.0.2.2 manually or
+    // run with a dart-define to override this value.
+    return _localIp;
+  }
+
+  static String get baseUrl => kIsWeb ? 'http://localhost:8080/api' : 'http://$_host:8080/api';
+
+  static String get osrmUrl => kIsWeb ? 'http://localhost:5000' : 'http://$_host:5000';
   
   // Auth endpoints
   static const String login = '/auth/login';
