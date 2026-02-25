@@ -4,8 +4,10 @@ import com.example.backend.dto.NotificationDTO;
 import com.example.backend.exception.ResourceNotFoundException;
 import com.example.backend.model.Notification;
 import com.example.backend.repository.NotificationRepository;
+import com.example.backend.service.FcmService;
 import com.example.backend.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,9 +17,11 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final FcmService fcmService;
 
     @Override
     public NotificationDTO create(Long destinataireId, String type, String message, Long orderId, Long livreurId) {
@@ -39,6 +43,14 @@ public class NotificationServiceImpl implements NotificationService {
                 .isRead(false)
                 .build();
         notif = notificationRepository.save(notif);
+
+        // Send FCM push notification
+        try {
+            fcmService.sendToUser(destinataireId, title, message, orderId);
+        } catch (Exception e) {
+            log.error("Failed to send FCM push for notification {}: {}", notif.getId(), e.getMessage());
+        }
+
         return toDTO(notif);
     }
 

@@ -2,20 +2,56 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/models/notification.dart';
 import '../data/services/notification_service.dart';
+import '../data/services/fcm_notification_service.dart';
 
 class NotificationProvider extends ChangeNotifier {
   final NotificationService _service = NotificationService();
+  final FcmNotificationService _fcmService = FcmNotificationService();
 
   List<AppNotification> _notifications = [];
   int _unreadCount = 0;
   bool _isLoading = false;
   String? _errorMessage;
   Timer? _pollingTimer;
+  bool _fcmInitialized = false;
 
   List<AppNotification> get notifications => _notifications;
   int get unreadCount => _unreadCount;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  /// Initialize FCM push notifications and register the token with backend
+  Future<void> initializeFcm({Function(String? orderId)? onNotificationTap}) async {
+    if (_fcmInitialized) {
+      debugPrint('========== NotificationProvider: FCM already initialized, skipping ==========');
+      return;
+    }
+    try {
+      debugPrint('========== NotificationProvider: Starting FCM init... ==========');
+      await _fcmService.initialize();
+      debugPrint('========== NotificationProvider: FCM service initialized ==========');
+      _fcmService.onNotificationTap = (orderId) {
+        loadAll();
+        onNotificationTap?.call(orderId);
+      };
+      await _fcmService.registerTokenWithServer();
+      _fcmInitialized = true;
+      debugPrint('========== NotificationProvider: FCM fully initialized ==========');
+    } catch (e, stackTrace) {
+      debugPrint('========== NotificationProvider: FCM init error: $e ==========');
+      debugPrint('Stack: $stackTrace');
+    }
+  }
+
+  /// Unregister FCM token (call on logout)
+  Future<void> unregisterFcm() async {
+    try {
+      await _fcmService.unregisterToken();
+      _fcmInitialized = false;
+    } catch (e) {
+      debugPrint('NotificationProvider: FCM unregister error: $e');
+    }
+  }
 
   /// Start polling for new notifications every [seconds] seconds
   void startPolling({int seconds = 30}) {

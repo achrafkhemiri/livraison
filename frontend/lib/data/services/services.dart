@@ -5,3 +5,4 @@ export 'data_services.dart';
 export 'order_service.dart';
 export 'osrm_service.dart';
 export 'notification_service.dart';
+export 'fcm_notification_service.dart';

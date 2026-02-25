@@ -24,7 +24,9 @@ class NotificationService {
   /// Get count of unread notifications
   Future<int> getUnreadCount() async {
     final response = await _api.get('${ApiConstants.notifications}/unread/count');
-    return response as int;
+    if (response is int) return response;
+    if (response is Map<String, dynamic>) return response['count'] as int;
+    return 0;
   }
 
   /// Mark a single notification as read

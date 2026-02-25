@@ -58,6 +58,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     if (!mounted) return;
 
     if (success) {
+      // Initialize FCM push notifications after successful login
+      final notificationProvider = context.read<NotificationProvider>();
+      await notificationProvider.initializeFcm();
+      notificationProvider.startPolling();
+
+      if (!mounted) return;
+
       // Navigation will be handled by the router based on role
       if (authProvider.isGerant) {
         Navigator.of(context).pushReplacementNamed('/gerant/dashboard');

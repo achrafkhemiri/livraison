@@ -55,6 +55,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     // Navigate based on auth status
     if (authProvider.isAuthenticated) {
+      // Initialize FCM push notifications after successful auth
+      final notificationProvider = context.read<NotificationProvider>();
+      await notificationProvider.initializeFcm();
+      notificationProvider.startPolling();
+
       if (authProvider.isGerant) {
         Navigator.of(context).pushReplacementNamed('/gerant/dashboard');
       } else if (authProvider.isLivreur) {

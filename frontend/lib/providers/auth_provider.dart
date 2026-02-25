@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../data/models/models.dart';
 import '../data/services/services.dart';
+import '../data/services/fcm_notification_service.dart';
 
 enum AuthStatus {
   initial,
@@ -12,6 +13,7 @@ enum AuthStatus {
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final FcmNotificationService _fcmService = FcmNotificationService();
   
   AuthStatus _status = AuthStatus.initial;
   User? _user;
@@ -132,6 +134,8 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
+      // Unregister FCM token before logout
+      await _fcmService.unregisterToken();
       await _authService.logout();
     } finally {
       _user = null;

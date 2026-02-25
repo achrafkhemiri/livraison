@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1062333774064",
+    "project_id": "smart-delivery-2a371",
+    "storage_bucket": "smart-delivery-2a371.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1062333774064:android:180628bbf7d0b5c0042a35",
+        "android_client_info": {
+          "package_name": "com.example.frontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbQGTapsez1k-DJkbcB8Im7z12FBw4Y4E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

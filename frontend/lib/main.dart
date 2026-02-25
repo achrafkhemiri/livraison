@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // Core
 import 'core/constants/app_colors.dart';
@@ -11,6 +13,9 @@ import 'providers/providers.dart';
 
 // Models
 import 'data/models/models.dart';
+
+// Services
+import 'data/services/fcm_notification_service.dart';
 
 // Screens
 import 'ui/screens/splash_screen.dart';
@@ -24,8 +29,14 @@ import 'ui/screens/gerant/admin_map_screen.dart';
 import 'ui/screens/livreur/livreur_home_screen.dart';
 import 'ui/screens/livreur/delivery_map_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
+  await Firebase.initializeApp();
+
+  // Register the background message handler
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([

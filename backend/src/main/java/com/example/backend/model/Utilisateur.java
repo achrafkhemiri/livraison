@@ -53,6 +53,10 @@ public class Utilisateur implements UserDetails {
     private LocalDateTime dernierePositionAt;
     
     private Boolean actif = true;
+
+    /** Firebase Cloud Messaging token for push notifications */
+    @Column(name = "fcm_token", length = 512)
+    private String fcmToken;
     
     @Column(name = "created_at")
     private LocalDateTime createdAt;
