@@ -199,42 +199,70 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(statusIcon, color: statusColor, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    fit: FlexFit.loose,
+                                    child: Text(
+                                      'Commande',
+                                      style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '#${order.id}',
+                                    style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                order.dateCommande?.toString().substring(0, 10) ?? '',
+                                style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Icon(statusIcon, color: statusColor, size: 20),
+                        child: Text(
+                          statusText,
+                          style: AppStyles.caption.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                        ),
                       ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Commande #${order.id}',
-                            style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            order.dateCommande?.toString().substring(0, 10) ?? '',
-                            style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      statusText,
-                      style: AppStyles.caption.copyWith(color: statusColor, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -788,8 +816,10 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                     else
                       DropdownButtonFormField<Client>(
                         value: selectedClient,
-                        decoration: AppStyles.inputDecoration(label: 'Client *', prefixIcon: Icons.person),
+                        decoration: AppStyles.inputDecoration(label: 'Client *', prefixIcon: Icons.person)
+                            .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
                         isExpanded: true,
+                        style: AppStyles.bodyMedium,
                         items: clients.map((client) {
                           final displayName = client.nom != null && client.nom!.isNotEmpty
                               ? client.nom!
@@ -799,6 +829,7 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                             child: Text(
                               '#${client.id} - $displayName',
                               overflow: TextOverflow.ellipsis,
+                              style: AppStyles.bodyMedium,
                             ),
                           );
                         }).toList(),
@@ -819,7 +850,9 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                         Expanded(
                           child: TextField(
                             controller: latController,
-                            decoration: AppStyles.inputDecoration(label: 'Latitude', prefixIcon: Icons.location_on),
+                            style: AppStyles.bodyMedium,
+                            decoration: AppStyles.inputDecoration(label: 'Latitude', prefixIcon: Icons.location_on)
+                                .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           ),
                         ),
@@ -827,7 +860,9 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                         Expanded(
                           child: TextField(
                             controller: lngController,
-                            decoration: AppStyles.inputDecoration(label: 'Longitude', prefixIcon: Icons.location_on),
+                            style: AppStyles.bodyMedium,
+                            decoration: AppStyles.inputDecoration(label: 'Longitude', prefixIcon: Icons.location_on)
+                                .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           ),
                         ),
@@ -836,7 +871,9 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                     const SizedBox(height: 12),
                     TextField(
                       controller: adresseController,
-                      decoration: AppStyles.inputDecoration(label: 'Adresse de livraison', prefixIcon: Icons.home),
+                      style: AppStyles.bodyMedium,
+                      decoration: AppStyles.inputDecoration(label: 'Adresse de livraison', prefixIcon: Icons.home)
+                          .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
                     ),
                     const SizedBox(height: 16),
                     
@@ -879,39 +916,90 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                         final idx = entry.key;
                         final item = entry.value;
                         return Card(
-                          child: ListTile(
-                            dense: true,
-                            title: Text(item['produitNom'] ?? 'Produit #${item['produitId']}'),
-                            subtitle: Text('Prix: ${(item['prixHT'] ?? 0.0).toStringAsFixed(2)} TND | Stock total: ${item['totalStock']}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, size: 20),
-                                  onPressed: () {
-                                    setState(() {
-                                      if ((item['quantite'] as int) > 1) {
-                                        item['quantite'] = (item['quantite'] as int) - 1;
-                                      }
-                                    });
-                                  },
+                                // Left: product info (title, price, stock)
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        item['produitNom'] ?? 'Produit #${item['produitId']}',
+                                        style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Prix: ${(item['prixHT'] ?? 0.0).toStringAsFixed(2)} TND',
+                                        style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Stock total: ${item['totalStock'] ?? 0}',
+                                        style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                Text('${item['quantite']}', style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
-                                IconButton(
-                                  icon: const Icon(Icons.add_circle_outline, size: 20),
-                                  onPressed: () {
-                                    setState(() {
-                                      item['quantite'] = (item['quantite'] as int) + 1;
-                                    });
-                                  },
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.delete_outline, size: 20, color: AppColors.error),
-                                  onPressed: () {
-                                    setState(() {
-                                      selectedItems.removeAt(idx);
-                                    });
-                                  },
+
+                                const SizedBox(width: 12),
+
+                                // Right: quantity controls and delete (fixed width)
+                                SizedBox(
+                                  width: 120,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                            onPressed: () {
+                                              setState(() {
+                                                if ((item['quantite'] as int) > 1) {
+                                                  item['quantite'] = (item['quantite'] as int) - 1;
+                                                }
+                                              });
+                                            },
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                                            child: Text('${item['quantite']}', style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.add_circle_outline, size: 20),
+                                            onPressed: () {
+                                              setState(() {
+                                                item['quantite'] = (item['quantite'] as int) + 1;
+                                              });
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: IconButton(
+                                          icon: Icon(Icons.delete_outline, size: 20, color: AppColors.error),
+                                          onPressed: () {
+                                            setState(() {
+                                              selectedItems.removeAt(idx);
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),

@@ -242,7 +242,8 @@ class _GerantDashboardState extends State<GerantDashboard> {
               crossAxisCount: 2,
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
-              childAspectRatio: 1.5,
+              // reduce aspect ratio so cards get a bit more vertical space
+              childAspectRatio: 1.25,
               children: [
                 _buildStatCard(
                   'Commandes',
@@ -292,31 +293,36 @@ class _GerantDashboardState extends State<GerantDashboard> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
             ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: AppStyles.headingMedium.copyWith(color: color),
+            const SizedBox(height: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    value,
+                    style: AppStyles.headingMedium.copyWith(color: color),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    title,
+                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
               ),
-              Text(
-                title,
-                style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
     );
   }
 
@@ -376,8 +382,10 @@ class _GerantDashboardState extends State<GerantDashboard> {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: 100,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          height: 100,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, color: AppColors.primary, size: 28),
               const SizedBox(height: 8),
@@ -385,6 +393,8 @@ class _GerantDashboardState extends State<GerantDashboard> {
                 label,
                 style: AppStyles.bodySmall.copyWith(fontWeight: FontWeight.w500),
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
