@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 // Core
 import 'core/constants/app_colors.dart';
@@ -54,6 +56,10 @@ void main() async {
     ),
   );
   
+  // Initialize locale date formatting (prevents LocaleDataException)
+  await initializeDateFormatting('fr_FR');
+  Intl.defaultLocale = 'fr_FR';
+
   runApp(const SmartDeliveryApp());
 }
 

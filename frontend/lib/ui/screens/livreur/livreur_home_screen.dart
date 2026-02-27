@@ -155,6 +155,8 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actionsIconTheme: const IconThemeData(color: Colors.white),
         title: Row(
           children: [
             const Icon(Icons.delivery_dining, color: Colors.white),
@@ -248,6 +250,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
+          indicatorWeight: 3.0,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          labelStyle: AppStyles.bodyMedium.copyWith(color: Colors.white),
+          unselectedLabelStyle: AppStyles.bodyMedium.copyWith(color: Colors.white70),
           tabs: [
             const Tab(text: 'À collecter', icon: Icon(Icons.inventory_2)),
             const Tab(text: 'À livrer', icon: Icon(Icons.local_shipping)),

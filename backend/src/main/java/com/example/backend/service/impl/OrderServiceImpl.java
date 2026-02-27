@@ -2,6 +2,7 @@ package com.example.backend.service.impl;
 
 import com.example.backend.dto.OrderDTO;
 import com.example.backend.dto.OrderItemDTO;
+import com.example.backend.dto.PageResponse;
 import com.example.backend.exception.BadRequestException;
 import com.example.backend.exception.ResourceNotFoundException;
 import com.example.backend.mapper.OrderMapper;
@@ -9,14 +10,24 @@ import com.example.backend.model.*;
 import com.example.backend.repository.*;
 import com.example.backend.service.NotificationService;
 import com.example.backend.service.OrderService;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -53,6 +64,77 @@ public class OrderServiceImpl implements OrderService {
         return orders.stream()
                 .map(orderMapper::toDTO)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<OrderDTO> searchOrders(Long societeId, String search, String status,
+                                                LocalDate dateFrom, LocalDate dateTo,
+                                                int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "dateCommande"));
+
+        Specification<Order> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            // Filter by societe
+            if (societeId != null) {
+                predicates.add(cb.equal(root.get("societeId"), societeId));
+            }
+
+            // Filter by status
+            if (status != null && !status.isBlank() && !"all".equalsIgnoreCase(status)) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+
+            // Filter by date range
+            if (dateFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("dateCommande"), dateFrom.atStartOfDay()));
+            }
+            if (dateTo != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("dateCommande"), dateTo.atTime(23, 59, 59)));
+            }
+
+            // Search by numero, client name, livreur name, or address
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.toLowerCase() + "%";
+                Predicate numeroPred = cb.like(cb.lower(root.get("numero")), pattern);
+                Predicate addressPred = cb.like(cb.lower(root.get("adresseLivraison")), pattern);
+                Predicate notesPred = cb.like(cb.lower(root.get("notes")), pattern);
+
+                // Join to user for client name search
+                Join<Object, Object> userJoin = root.join("user", JoinType.LEFT);
+                Predicate clientNamePred = cb.like(cb.lower(userJoin.get("name")), pattern);
+
+                // Join to livreur for livreur name search
+                Join<Object, Object> livreurJoin = root.join("livreur", JoinType.LEFT);
+                Predicate livreurNomPred = cb.like(cb.lower(livreurJoin.get("nom")), pattern);
+                Predicate livreurPrenomPred = cb.like(cb.lower(livreurJoin.get("prenom")), pattern);
+
+                predicates.add(cb.or(numeroPred, addressPred, notesPred,
+                        clientNamePred, livreurNomPred, livreurPrenomPred));
+            }
+
+            // Ensure distinct results
+            query.distinct(true);
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Page<Order> orderPage = orderRepository.findAll(spec, pageable);
+
+        List<OrderDTO> content = orderPage.getContent().stream()
+                .map(orderMapper::toDTO)
+                .collect(Collectors.toList());
+
+        return PageResponse.<OrderDTO>builder()
+                .content(content)
+                .page(orderPage.getNumber())
+                .size(orderPage.getSize())
+                .totalElements(orderPage.getTotalElements())
+                .totalPages(orderPage.getTotalPages())
+                .first(orderPage.isFirst())
+                .last(orderPage.isLast())
+                .build();
     }
     
     @Override

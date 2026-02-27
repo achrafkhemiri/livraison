@@ -1,11 +1,17 @@
 package com.example.backend.service;
 
 import com.example.backend.dto.OrderDTO;
+import com.example.backend.dto.PageResponse;
+
+import java.time.LocalDate;
 import java.util.List;
 
 public interface OrderService {
     List<OrderDTO> findAll();
     List<OrderDTO> findBySocieteId(Long societeId);
+    PageResponse<OrderDTO> searchOrders(Long societeId, String search, String status,
+                                         LocalDate dateFrom, LocalDate dateTo,
+                                         int page, int size);
     OrderDTO findById(Long id);
     OrderDTO findByNumero(String numero);
     List<OrderDTO> findByUserId(Long userId);

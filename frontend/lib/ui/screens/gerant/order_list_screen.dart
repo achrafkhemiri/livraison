@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
@@ -9,350 +11,1186 @@ import '../../../providers/providers.dart';
 
 class OrderListScreen extends StatefulWidget {
   final int? livreurId;
-  
+
   const OrderListScreen({super.key, this.livreurId});
 
   @override
   State<OrderListScreen> createState() => _OrderListScreenState();
 }
 
-class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final List<String> _statuses = ['all', 'pending', 'processing', 'shipped', 'delivered', 'cancelled'];
-  final List<String> _statusLabels = ['Toutes', 'En attente', 'En cours', 'Livraison', 'Livrées', 'Annulées'];
+class _OrderListScreenState extends State<OrderListScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce;
+  String _selectedStatus = 'all';
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
+  bool _showFilters = false;
+
+  final List<Map<String, dynamic>> _statusOptions = [
+    {'value': 'all', 'label': 'Toutes', 'icon': Icons.list_alt, 'color': AppColors.primary},
+    {'value': 'pending', 'label': 'En attente', 'icon': Icons.schedule, 'color': AppColors.statusPending},
+    {'value': 'assigned', 'label': 'Proposée', 'icon': Icons.assignment_ind, 'color': Colors.amber},
+    {'value': 'en_cours', 'label': 'Acceptée', 'icon': Icons.thumb_up, 'color': AppColors.statusProcessing},
+    {'value': 'processing', 'label': 'En cours', 'icon': Icons.sync, 'color': AppColors.statusProcessing},
+    {'value': 'shipped', 'label': 'Livraison', 'icon': Icons.local_shipping, 'color': AppColors.statusShipped},
+    {'value': 'delivered', 'label': 'Livrées', 'icon': Icons.check_circle, 'color': AppColors.statusDelivered},
+    {'value': 'cancelled', 'label': 'Annulées', 'icon': Icons.cancel, 'color': AppColors.statusCancelled},
+  ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _statuses.length, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<OrderProvider>().loadOrders();
+      _loadOrders();
     });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
-  List<Order> _filterOrders(List<Order> orders, String status) {
-    final livreurId = widget.livreurId ?? (ModalRoute.of(context)?.settings.arguments as int?);
-    
-    var filtered = orders;
-    if (livreurId != null) {
-      filtered = orders.where((o) => o.livreurId == livreurId).toList();
-    }
-    
-    if (status == 'all') return filtered;
-    return filtered.where((o) => o.status == status).toList();
+  void _loadOrders() {
+    context.read<OrderProvider>().searchOrders(
+      page: 0,
+      search: _searchController.text.isNotEmpty ? _searchController.text : null,
+      status: _selectedStatus != 'all' ? _selectedStatus : null,
+      dateFrom: _dateFrom,
+      dateTo: _dateTo,
+    );
   }
 
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _loadOrders();
+    });
+  }
+
+  void _onStatusChanged(String status) {
+    setState(() => _selectedStatus = status);
+    _loadOrders();
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _searchController.clear();
+      _selectedStatus = 'all';
+      _dateFrom = null;
+      _dateTo = null;
+      _showFilters = false;
+    });
+    _loadOrders();
+  }
+
+  bool get _hasActiveFilters =>
+      _searchController.text.isNotEmpty ||
+      _selectedStatus != 'all' ||
+      _dateFrom != null ||
+      _dateTo != null;
+
+  // ── Build ───────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallPhone = screenWidth < 360;
+    final isMediumPhone = screenWidth >= 360 && screenWidth < 400;
+    final horizontalPadding = isSmallPhone ? 12.0 : 16.0;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.primary,
-        title: Text('Commandes', style: AppStyles.headingMedium.copyWith(color: Colors.white)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          tabs: _statusLabels.map((label) => Tab(text: label)).toList(),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(context, isSmallPhone),
+            _buildSearchBar(horizontalPadding, isSmallPhone),
+            _buildStatusChips(isSmallPhone),
+            if (_showFilters) _buildDateFilter(horizontalPadding, isSmallPhone),
+            if (_hasActiveFilters) _buildActiveFiltersBanner(horizontalPadding),
+            _buildResultsHeader(horizontalPadding, isSmallPhone),
+            Expanded(
+              child: _buildOrdersList(horizontalPadding, isSmallPhone, isMediumPhone),
+            ),
+            _buildPaginationControls(isSmallPhone),
+          ],
         ),
       ),
-      body: Consumer<OrderProvider>(
-        builder: (context, provider, _) {
-          if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      // Bottom FAB removed; add button moved to header
+    );
+  }
 
-          if (provider.errorMessage != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                  const SizedBox(height: 16),
-                  Text(provider.errorMessage!, style: AppStyles.bodyMedium),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => provider.loadOrders(),
-                    child: const Text('Réessayer'),
-                  ),
-                ],
+  // ── Header ──────────────────────────────────────────────────
+  Widget _buildHeader(BuildContext context, bool isSmall) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppColors.primaryGradient,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.fromLTRB(isSmall ? 12 : 16, 12, isSmall ? 12 : 16, 20),
+      child: Row(
+        children: [
+          Material(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => Navigator.pop(context),
+              child: const Padding(
+                padding: EdgeInsets.all(8),
+                child: Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
               ),
-            );
-          }
-
-          return TabBarView(
-            controller: _tabController,
-            children: _statuses.map((status) {
-              final filteredOrders = _filterOrders(provider.orders, status);
-              
-              if (filteredOrders.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.inbox_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
-                      const SizedBox(height: 16),
-                      Text('Aucune commande', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
-                    ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Commandes',
+                  style: AppStyles.headingMedium.copyWith(
+                    color: Colors.white,
+                    fontSize: isSmall ? 18 : 22,
                   ),
-                );
-              }
-
-              return RefreshIndicator(
-                onRefresh: () => provider.loadOrders(),
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: filteredOrders.length,
-                  itemBuilder: (context, index) {
-                    final order = filteredOrders[index];
-                    return _buildOrderCard(order, provider);
-                  },
                 ),
-              );
-            }).toList(),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showCreateOrderDialog(context),
-        backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add, color: Colors.white),
+                Consumer<OrderProvider>(
+                  builder: (_, provider, __) => Text(
+                    '${provider.totalElements} commande${provider.totalElements > 1 ? 's' : ''}',
+                    style: AppStyles.bodySmall.copyWith(
+                      color: Colors.white70,
+                      fontSize: isSmall ? 11 : 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Material(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                setState(() => _showFilters = !_showFilters);
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Stack(
+                  children: [
+                    Icon(
+                      _showFilters ? Icons.filter_alt : Icons.filter_alt_outlined,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    if (_hasActiveFilters)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Small round '+' button placed next to filter
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.white.withOpacity(0.2),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _showCreateOrderDialog(context),
+              child: const Padding(
+                padding: EdgeInsets.all(8),
+                child: Icon(Icons.add, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildOrderCard(Order order, OrderProvider provider) {
-    Color statusColor;
-    String statusText;
-    IconData statusIcon;
-    
-    switch (order.status) {
-      case 'pending':
-        statusColor = AppColors.statusPending;
-        statusText = 'En attente';
-        statusIcon = Icons.schedule;
-        break;
-      case 'assigned':
-        statusColor = Colors.amber;
-        statusText = 'Proposée au livreur';
-        statusIcon = Icons.assignment_ind;
-        break;
-      case 'en_cours':
-        statusColor = AppColors.statusProcessing;
-        statusText = 'Acceptée';
-        statusIcon = Icons.thumb_up;
-        break;
-      case 'processing':
-        statusColor = AppColors.statusProcessing;
-        statusText = 'En cours';
-        statusIcon = Icons.sync;
-        break;
-      case 'shipped':
-        statusColor = AppColors.statusShipped;
-        statusText = 'En livraison';
-        statusIcon = Icons.local_shipping;
-        break;
-      case 'delivered':
-        statusColor = AppColors.statusDelivered;
-        statusText = 'Livrée';
-        statusIcon = Icons.check_circle;
-        break;
-      case 'cancelled':
-        statusColor = AppColors.statusCancelled;
-        statusText = 'Annulée';
-        statusIcon = Icons.cancel;
-        break;
-      case 'done':
-        statusColor = AppColors.success;
-        statusText = 'Terminée';
-        statusIcon = Icons.done_all;
-        break;
-      default:
-        statusColor = AppColors.textSecondary;
-        statusText = order.status ?? 'Inconnu';
-        statusIcon = Icons.help_outline;
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _showOrderDetails(order),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(statusIcon, color: statusColor, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    fit: FlexFit.loose,
-                                    child: Text(
-                                      'Commande',
-                                      style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '#${order.id}',
-                                    style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                order.dateCommande?.toString().substring(0, 10) ?? '',
-                                style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 120),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          statusText,
-                          style: AppStyles.caption.copyWith(color: statusColor, fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildInfoChip(Icons.person_outline, 'Client: ${order.clientId ?? "N/A"}'),
-                  _buildInfoChip(Icons.delivery_dining, 'Livreur: ${order.livreurId ?? "Non assigné"}'),
-                ],
-              ),
-              if (order.montantTTC != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildInfoChip(Icons.attach_money, '${order.montantTTC!.toStringAsFixed(2)} TND'),
-                    PopupMenuButton<String>(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Actions', style: AppStyles.caption.copyWith(color: AppColors.primary)),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
-                          ],
-                        ),
-                      ),
-                      onSelected: (value) => _handleOrderAction(order, value, provider),
-                      itemBuilder: (context) => [
-                        if (order.status == 'pending') ...[
-                          const PopupMenuItem(value: 'assign', child: Row(
-                            children: [Icon(Icons.person_add, size: 20), SizedBox(width: 8), Text('Assigner')],
-                          )),
-                          const PopupMenuItem(value: 'processing', child: Row(
-                            children: [Icon(Icons.play_arrow, size: 20), SizedBox(width: 8), Text('Commencer')],
-                          )),
-                        ],
-                        if (order.status == 'assigned') ...[
-                          PopupMenuItem(value: 'assign', child: Row(
-                            children: [Icon(Icons.swap_horiz, size: 20, color: Colors.amber), const SizedBox(width: 8), Text('Re-assigner', style: TextStyle(color: Colors.amber[800]))],
-                          )),
-                        ],
-                        if (order.status == 'en_cours')
-                          const PopupMenuItem(value: 'processing', child: Row(
-                            children: [Icon(Icons.play_arrow, size: 20), SizedBox(width: 8), Text('Commencer traitement')],
-                          )),
-                        if (order.status == 'processing')
-                          const PopupMenuItem(value: 'shipped', child: Row(
-                            children: [Icon(Icons.local_shipping, size: 20), SizedBox(width: 8), Text('Expédier')],
-                          )),
-                        if (order.status == 'shipped')
-                          const PopupMenuItem(value: 'delivered', child: Row(
-                            children: [Icon(Icons.check_circle, size: 20), SizedBox(width: 8), Text('Livré')],
-                          )),
-                        if (order.status != 'cancelled' && order.status != 'delivered')
-                          PopupMenuItem(value: 'cancelled', child: Row(
-                            children: [Icon(Icons.cancel, size: 20, color: AppColors.error), const SizedBox(width: 8), Text('Annuler', style: TextStyle(color: AppColors.error))],
-                          )),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ],
+  // ── Search Bar ──────────────────────────────────────────────
+  Widget _buildSearchBar(double hPad, bool isSmall) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: TextField(
+          controller: _searchController,
+          onChanged: _onSearchChanged,
+          style: AppStyles.bodyMedium.copyWith(fontSize: isSmall ? 13 : 14),
+          decoration: InputDecoration(
+            hintText: 'Rechercher par n°, client, livreur...',
+            hintStyle: AppStyles.bodyMedium.copyWith(
+              color: AppColors.textHint,
+              fontSize: isSmall ? 12 : 14,
+            ),
+            prefixIcon: Icon(Icons.search, color: AppColors.textSecondary, size: isSmall ? 20 : 22),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: Icon(Icons.clear, color: AppColors.textSecondary, size: isSmall ? 18 : 20),
+                    onPressed: () {
+                      _searchController.clear();
+                      _loadOrders();
+                    },
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: isSmall ? 12 : 14,
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String text) {
+  // ── Status Chips ────────────────────────────────────────────
+  Widget _buildStatusChips(bool isSmall) {
+    return SizedBox(
+      height: isSmall ? 42 : 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 16),
+        itemCount: _statusOptions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final option = _statusOptions[index];
+          final isSelected = _selectedStatus == option['value'];
+          final color = option['color'] as Color;
+
+          return GestureDetector(
+            onTap: () => _onStatusChanged(option['value'] as String),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.symmetric(
+                horizontal: isSmall ? 10 : 14,
+                vertical: isSmall ? 6 : 8,
+              ),
+              decoration: BoxDecoration(
+                color: isSelected ? color : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: isSelected ? color : AppColors.border,
+                  width: isSelected ? 1.5 : 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: color.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    option['icon'] as IconData,
+                    size: isSmall ? 14 : 16,
+                    color: isSelected ? Colors.white : color,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    option['label'] as String,
+                    style: TextStyle(
+                      fontSize: isSmall ? 11 : 12,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Date Filter Panel ───────────────────────────────────────
+  Widget _buildDateFilter(double hPad, bool isSmall) {
+    final dateFormat = DateFormat('dd/MM/yyyy');
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      margin: EdgeInsets.fromLTRB(hPad, 8, hPad, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.date_range, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Filtrer par date',
+                style: AppStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: isSmall ? 13 : 14,
+                ),
+              ),
+              const Spacer(),
+              if (_dateFrom != null || _dateTo != null)
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _dateFrom = null;
+                      _dateTo = null;
+                    });
+                    _loadOrders();
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'Effacer',
+                    style: TextStyle(fontSize: isSmall ? 11 : 12, color: AppColors.error),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDatePickerButton(
+                  label: 'Du',
+                  date: _dateFrom,
+                  dateFormat: dateFormat,
+                  isSmall: isSmall,
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _dateFrom ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      setState(() => _dateFrom = picked);
+                      _loadOrders();
+                    }
+                  },
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(Icons.arrow_forward, size: 16, color: AppColors.textSecondary),
+              ),
+              Expanded(
+                child: _buildDatePickerButton(
+                  label: 'Au',
+                  date: _dateTo,
+                  dateFormat: dateFormat,
+                  isSmall: isSmall,
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _dateTo ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      setState(() => _dateTo = picked);
+                      _loadOrders();
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDatePickerButton({
+    required String label,
+    required DateTime? date,
+    required DateFormat dateFormat,
+    required bool isSmall,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 10 : 12),
+        decoration: BoxDecoration(
+          color: date != null ? AppColors.primary.withOpacity(0.08) : AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: date != null ? AppColors.primary.withOpacity(0.3) : AppColors.border,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.calendar_today,
+              size: isSmall ? 14 : 16,
+              color: date != null ? AppColors.primary : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                date != null ? dateFormat.format(date) : label,
+                style: TextStyle(
+                  fontSize: isSmall ? 12 : 13,
+                  color: date != null ? AppColors.primary : AppColors.textHint,
+                  fontWeight: date != null ? FontWeight.w600 : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Active Filters Banner ───────────────────────────────────
+  Widget _buildActiveFiltersBanner(double hPad) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.info.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.info.withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.filter_list, size: 16, color: AppColors.info),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Filtres actifs',
+                style: TextStyle(fontSize: 12, color: AppColors.info, fontWeight: FontWeight.w600),
+              ),
+            ),
+            GestureDetector(
+              onTap: _clearFilters,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Effacer tout',
+                  style: TextStyle(fontSize: 11, color: AppColors.info, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Results Header ──────────────────────────────────────────
+  Widget _buildResultsHeader(double hPad, bool isSmall) {
+    return Consumer<OrderProvider>(
+      builder: (_, provider, __) {
+        if (provider.isLoadingPage) return const SizedBox.shrink();
+        return Padding(
+          padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${provider.totalElements} résultat${provider.totalElements > 1 ? 's' : ''}',
+                style: AppStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: isSmall ? 11 : 12,
+                ),
+              ),
+              Row(
+                children: [
+                  // Page size selector (smaller square)
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: SizedBox(
+                      width: 52,
+                      height: 36,
+                      child: DropdownButton<int>(
+                        isExpanded: true,
+                        alignment: Alignment.center,
+                        value: provider.pageSize,
+                        iconSize: 18,
+                        style: AppStyles.bodySmall.copyWith(fontSize: 12),
+                        underline: const SizedBox.shrink(),
+                        items: const [5, 10, 15].map((v) {
+                          return DropdownMenuItem<int>(
+                            value: v,
+                            child: Center(child: Text('$v')),
+                          );
+                        }).toList(),
+                        onChanged: (v) async {
+                          if (v == null) return;
+                          await provider.searchOrders(
+                            page: 0,
+                            size: v,
+                            search: provider.searchQuery,
+                            status: provider.statusFilter,
+                            dateFrom: provider.dateFrom,
+                            dateTo: provider.dateTo,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  if (provider.totalPages > 1)
+                    Text(
+                      'Page ${provider.currentPage + 1}/${provider.totalPages}',
+                      style: AppStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: isSmall ? 11 : 12,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Orders List ─────────────────────────────────────────────
+  Widget _buildOrdersList(double hPad, bool isSmall, bool isMedium) {
+    return Consumer<OrderProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoadingPage) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(strokeWidth: 3),
+                const SizedBox(height: 16),
+                Text(
+                  'Chargement...',
+                  style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (provider.errorMessage != null) {
+          return Center(
+            child: Padding(
+              padding: EdgeInsets.all(hPad),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Erreur de chargement',
+                    style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    provider.errorMessage!,
+                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: _loadOrders,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Réessayer'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (provider.paginatedOrders.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.06),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.inbox_outlined,
+                    size: isSmall ? 48 : 64,
+                    color: AppColors.primary.withOpacity(0.4),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _hasActiveFilters ? 'Aucun résultat trouvé' : 'Aucune commande',
+                  style: AppStyles.bodyLarge.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: isSmall ? 14 : 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _hasActiveFilters
+                      ? 'Essayez de modifier vos filtres'
+                      : 'Les commandes apparaîtront ici',
+                  style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                ),
+                if (_hasActiveFilters) ...[
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: _clearFilters,
+                    icon: const Icon(Icons.clear_all, size: 18),
+                    label: const Text('Effacer les filtres'),
+                    style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () => provider.refreshCurrentPage(),
+          color: AppColors.primary,
+          child: ListView.builder(
+            padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 80),
+            itemCount: provider.paginatedOrders.length,
+            itemBuilder: (context, index) {
+              final order = provider.paginatedOrders[index];
+              return _buildOrderCard(order, provider, isSmall, isMedium);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Order Card ──────────────────────────────────────────────
+  Widget _buildOrderCard(Order order, OrderProvider provider, bool isSmall, bool isMedium) {
+    final statusInfo = _getStatusInfo(order.status);
+    final dateFormat = DateFormat('dd MMM yyyy, HH:mm', 'fr_FR');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _showOrderDetails(order),
+          child: Padding(
+            padding: EdgeInsets.all(isSmall ? 12 : 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row: status icon + order info + status badge
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: isSmall ? 36 : 44,
+                      height: isSmall ? 36 : 44,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            statusInfo.color.withOpacity(0.15),
+                            statusInfo.color.withOpacity(0.08),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        statusInfo.icon,
+                        color: statusInfo.color,
+                        size: isSmall ? 18 : 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'CMD ${order.id}',
+                                  style: AppStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: isSmall ? 13 : 15,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isSmall ? 8 : 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusInfo.color.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  statusInfo.label,
+                                  style: TextStyle(
+                                    fontSize: isSmall ? 10 : 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: statusInfo.color,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            order.dateCommande != null
+                                ? dateFormat.format(order.dateCommande!)
+                                : 'Date inconnue',
+                            style: AppStyles.caption.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: isSmall ? 10 : 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(height: 1, color: AppColors.divider.withOpacity(0.5)),
+                const SizedBox(height: 12),
+                // Details section — adaptive layout
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth < 300;
+                    if (isNarrow) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInfoRow(Icons.person_outline, 'Client',
+                              order.clientNom ?? 'Client #${order.clientId}', isSmall),
+                          const SizedBox(height: 6),
+                          _buildInfoRow(Icons.delivery_dining, 'Livreur',
+                              order.livreurNom ?? (order.livreurId != null ? '#${order.livreurId}' : 'Non assigné'), isSmall),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildAmountBadge(order, isSmall),
+                              _buildActionsButton(order, provider, isSmall),
+                            ],
+                          ),
+                        ],
+                      );
+                    }
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildInfoRow(Icons.person_outline, 'Client',
+                                  order.clientNom ?? 'Client #${order.clientId}', isSmall),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildInfoRow(Icons.delivery_dining, 'Livreur',
+                                  order.livreurNom ?? (order.livreurId != null ? '#${order.livreurId}' : 'Non assigné'), isSmall),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildAmountBadge(order, isSmall),
+                            _buildActionsButton(order, provider, isSmall),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value, bool isSmall) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: AppColors.textSecondary),
-        const SizedBox(width: 4),
-        Text(text, style: AppStyles.caption.copyWith(color: AppColors.textSecondary)),
+        Icon(icon, size: isSmall ? 14 : 16, color: AppColors.textSecondary),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: isSmall ? 9 : 10,
+                  color: AppColors.textHint,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: isSmall ? 11 : 12,
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
+  Widget _buildAmountBadge(Order order, bool isSmall) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmall ? 10 : 12,
+        vertical: isSmall ? 6 : 8,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.payments_outlined, size: isSmall ? 14 : 16, color: AppColors.accent),
+          const SizedBox(width: 6),
+          Text(
+            '${order.montantTTC?.toStringAsFixed(2) ?? "0.00"} TND',
+            style: TextStyle(
+              fontSize: isSmall ? 12 : 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionsButton(Order order, OrderProvider provider, bool isSmall) {
+    return PopupMenuButton<String>(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmall ? 10 : 12,
+          vertical: isSmall ? 6 : 8,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.more_horiz, size: isSmall ? 16 : 18, color: AppColors.primary),
+            const SizedBox(width: 4),
+            Text(
+              'Actions',
+              style: TextStyle(
+                fontSize: isSmall ? 11 : 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+      onSelected: (value) => _handleOrderAction(order, value, provider),
+      itemBuilder: (context) => [
+        if (order.status == 'pending') ...[
+          _buildPopupItem('assign', Icons.person_add, 'Assigner', AppColors.primary),
+          _buildPopupItem('processing', Icons.play_arrow, 'Commencer', AppColors.statusProcessing),
+        ],
+        if (order.status == 'assigned')
+          _buildPopupItem('assign', Icons.swap_horiz, 'Re-assigner', Colors.amber.shade700),
+        if (order.status == 'en_cours')
+          _buildPopupItem('processing', Icons.play_arrow, 'Commencer traitement', AppColors.statusProcessing),
+        if (order.status == 'processing')
+          _buildPopupItem('shipped', Icons.local_shipping, 'Expédier', AppColors.statusShipped),
+        if (order.status == 'shipped')
+          _buildPopupItem('delivered', Icons.check_circle, 'Livré', AppColors.statusDelivered),
+        if (order.status != 'cancelled' && order.status != 'delivered')
+          _buildPopupItem('cancelled', Icons.cancel, 'Annuler', AppColors.error),
+      ],
+    );
+  }
+
+  PopupMenuItem<String> _buildPopupItem(String value, IconData icon, String label, Color color) {
+    return PopupMenuItem(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  // ── Pagination Controls ─────────────────────────────────────
+  Widget _buildPaginationControls(bool isSmall) {
+    return Consumer<OrderProvider>(
+      builder: (_, provider, __) {
+        if (provider.totalPages <= 1) return const SizedBox.shrink();
+        return Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: isSmall ? 12 : 16,
+            vertical: 10,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildPaginationButton(
+                icon: Icons.chevron_left,
+                onTap: provider.isFirstPage ? null : () => provider.previousPage(),
+                isSmall: isSmall,
+              ),
+              const SizedBox(width: 8),
+              ..._buildPageNumbers(provider, isSmall),
+              const SizedBox(width: 8),
+              _buildPaginationButton(
+                icon: Icons.chevron_right,
+                onTap: provider.isLastPage ? null : () => provider.nextPage(),
+                isSmall: isSmall,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildPageNumbers(OrderProvider provider, bool isSmall) {
+    final List<Widget> buttons = [];
+    final current = provider.currentPage;
+    final total = provider.totalPages;
+
+    int start = (current - 2).clamp(0, total - 1);
+    int end = (current + 2).clamp(0, total - 1);
+    if (end - start < 4 && total >= 5) {
+      if (start == 0) {
+        end = (4).clamp(0, total - 1);
+      } else if (end == total - 1) {
+        start = (total - 5).clamp(0, total - 1);
+      }
+    }
+
+    if (start > 0) {
+      buttons.add(_buildPageButton(0, current == 0, provider, isSmall));
+      if (start > 1) {
+        buttons.add(Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text('...', style: TextStyle(color: AppColors.textSecondary, fontSize: isSmall ? 12 : 14)),
+        ));
+      }
+    }
+
+    for (int i = start; i <= end; i++) {
+      buttons.add(_buildPageButton(i, i == current, provider, isSmall));
+    }
+
+    if (end < total - 1) {
+      if (end < total - 2) {
+        buttons.add(Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text('...', style: TextStyle(color: AppColors.textSecondary, fontSize: isSmall ? 12 : 14)),
+        ));
+      }
+      buttons.add(_buildPageButton(total - 1, current == total - 1, provider, isSmall));
+    }
+
+    return buttons;
+  }
+
+  Widget _buildPageButton(int page, bool isActive, OrderProvider provider, bool isSmall) {
+    return GestureDetector(
+      onTap: isActive ? null : () => provider.goToPage(page),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: isSmall ? 32 : 36,
+        height: isSmall ? 32 : 36,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Center(
+          child: Text(
+            '${page + 1}',
+            style: TextStyle(
+              fontSize: isSmall ? 12 : 13,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              color: isActive ? Colors.white : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationButton({
+    required IconData icon,
+    required VoidCallback? onTap,
+    required bool isSmall,
+  }) {
+    final isDisabled = onTap == null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: isSmall ? 32 : 36,
+        height: isSmall ? 32 : 36,
+        decoration: BoxDecoration(
+          color: isDisabled ? AppColors.background : AppColors.primary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          icon,
+          size: isSmall ? 18 : 20,
+          color: isDisabled ? AppColors.textHint : AppColors.primary,
+        ),
+      ),
+    );
+  }
+
+  // ── Status Helper ───────────────────────────────────────────
+  _StatusInfo _getStatusInfo(String? status) {
+    switch (status) {
+      case 'pending':
+        return _StatusInfo('En attente', Icons.schedule, AppColors.statusPending);
+      case 'assigned':
+        return _StatusInfo('Proposée', Icons.assignment_ind, Colors.amber);
+      case 'en_cours':
+        return _StatusInfo('Acceptée', Icons.thumb_up, AppColors.statusProcessing);
+      case 'processing':
+        return _StatusInfo('En cours', Icons.sync, AppColors.statusProcessing);
+      case 'shipped':
+        return _StatusInfo('En livraison', Icons.local_shipping, AppColors.statusShipped);
+      case 'delivered':
+        return _StatusInfo('Livrée', Icons.check_circle, AppColors.statusDelivered);
+      case 'cancelled':
+        return _StatusInfo('Annulée', Icons.cancel, AppColors.statusCancelled);
+      case 'done':
+        return _StatusInfo('Terminée', Icons.done_all, AppColors.success);
+      default:
+        return _StatusInfo(status ?? 'Inconnu', Icons.help_outline, AppColors.textSecondary);
+    }
+  }
+
+  // ── Actions & Dialogs ───────────────────────────────────────
   Future<void> _handleOrderAction(Order order, String action, OrderProvider provider) async {
     if (action == 'assign') {
       await _showAssignDialog(order, provider);
@@ -363,14 +1201,16 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
           SnackBar(
             content: Text(success ? 'Statut mis à jour' : 'Erreur'),
             backgroundColor: success ? AppColors.success : AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
+        if (success) provider.refreshCurrentPage();
       }
     }
   }
 
   Future<void> _showAssignDialog(Order order, OrderProvider provider) async {
-    // Show loading while fetching recommendations
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -383,9 +1223,8 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
     } catch (_) {}
 
     if (!mounted) return;
-    Navigator.pop(context); // dismiss loading
+    Navigator.pop(context);
 
-    // Fallback: if recommendation API fails, fall back to basic livreur list
     if (recommendations.isEmpty) {
       await _showFallbackAssignDialog(order, provider);
       return;
@@ -397,11 +1236,12 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Row(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
             children: [
-              const Icon(Icons.recommend, color: AppColors.primary),
-              const SizedBox(width: 8),
-              const Expanded(child: Text('Assigner un livreur')),
+              Icon(Icons.recommend, color: AppColors.primary),
+              SizedBox(width: 8),
+              Expanded(child: Text('Assigner un livreur')),
             ],
           ),
           content: SizedBox(
@@ -411,7 +1251,7 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Livreurs triés par proximité (collecte + livraison)',
+                  'Livreurs triés par proximité',
                   style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 12),
@@ -427,28 +1267,15 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                       final livreurId = rec['livreurId'] as int?;
                       final nom = rec['livreurNom'] ?? 'Livreur #$livreurId';
                       final distance = (rec['distanceTotaleKm'] as num?)?.toDouble() ?? 0;
-                      final score = (rec['score'] as num?)?.toDouble() ?? 0;
-                      final activeOrders = rec['commandesActives'] as int? ?? 0;
-                      final tempsMinutes = (rec['tempsEstimeMinutes'] as num?)?.toDouble();
-                      final isRecommended = rec['recommended'] == true;
-                      final telephone = rec['telephone'] ?? '';
                       final isSelected = selectedLivreurId == livreurId;
 
                       return Card(
                         elevation: isSelected ? 3 : 1,
-                        color: isSelected
-                            ? AppColors.primary.withOpacity(0.08)
-                            : isRecommended
-                                ? Colors.green.withOpacity(0.05)
-                                : null,
+                        color: isSelected ? AppColors.primary.withOpacity(0.08) : null,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                           side: BorderSide(
-                            color: isSelected
-                                ? AppColors.primary
-                                : isRecommended
-                                    ? AppColors.success.withOpacity(0.5)
-                                    : Colors.transparent,
+                            color: isSelected ? AppColors.primary : Colors.transparent,
                             width: isSelected ? 2 : 1,
                           ),
                         ),
@@ -459,113 +1286,29 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                             padding: const EdgeInsets.all(12),
                             child: Row(
                               children: [
-                                // Rank
                                 Container(
                                   width: 32,
                                   height: 32,
                                   decoration: BoxDecoration(
-                                    color: isRecommended
-                                        ? AppColors.success
-                                        : AppColors.textSecondary.withOpacity(0.2),
+                                    color: AppColors.primary.withOpacity(0.2),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Center(
-                                    child: Text(
-                                      '${index + 1}',
-                                      style: TextStyle(
-                                        color: isRecommended ? Colors.white : AppColors.textPrimary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                    child: Text('${index + 1}',
+                                        style: const TextStyle(fontWeight: FontWeight.bold)),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-                                // Info
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              nom.toString(),
-                                              style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          if (isRecommended) ...[
-                                            const SizedBox(width: 6),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.success,
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                              child: const Text(
-                                                'Recommandé',
-                                                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          Icon(Icons.route, size: 14, color: AppColors.textSecondary),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${distance.toStringAsFixed(1)} km',
-                                            style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
-                                          ),
-                                          if (tempsMinutes != null) ...[
-                                            const SizedBox(width: 8),
-                                            Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              tempsMinutes < 60
-                                                  ? '${tempsMinutes.toStringAsFixed(0)} min'
-                                                  : '${(tempsMinutes / 60).toStringAsFixed(1)} h',
-                                              style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
-                                            ),
-                                          ],
-                                          const SizedBox(width: 8),
-                                          Icon(Icons.assignment, size: 14, color: AppColors.textSecondary),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '$activeOrders cmd active${activeOrders > 1 ? 's' : ''}',
-                                            style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
-                                          ),
-                                        ],
-                                      ),
-                                      if (telephone.toString().isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 2),
-                                          child: Text(
-                                            telephone.toString(),
-                                            style: AppStyles.caption.copyWith(color: AppColors.textSecondary, fontSize: 11),
-                                          ),
-                                        ),
+                                      Text(nom.toString(),
+                                          style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                                      Text('${distance.toStringAsFixed(1)} km',
+                                          style: AppStyles.caption.copyWith(color: AppColors.textSecondary)),
                                     ],
                                   ),
-                                ),
-                                // Score
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      'Score',
-                                      style: AppStyles.caption.copyWith(color: AppColors.textSecondary, fontSize: 10),
-                                    ),
-                                    Text(
-                                      score.toStringAsFixed(1),
-                                      style: AppStyles.bodyMedium.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        color: isRecommended ? AppColors.success : AppColors.textPrimary,
-                                      ),
-                                    ),
-                                  ],
                                 ),
                               ],
                             ),
@@ -592,12 +1335,12 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(success
-                                ? 'Commande proposée au livreur. En attente de sa réponse.'
-                                : 'Erreur: ${provider.errorMessage}'),
+                            content: Text(success ? 'Commande proposée au livreur' : 'Erreur'),
                             backgroundColor: success ? AppColors.success : AppColors.error,
+                            behavior: SnackBarBehavior.floating,
                           ),
                         );
+                        if (success) provider.refreshCurrentPage();
                       }
                     },
               icon: const Icon(Icons.send, size: 18),
@@ -605,6 +1348,7 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
           ],
@@ -613,7 +1357,6 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
     );
   }
 
-  /// Fallback dialog when recommendation API is unavailable
   Future<void> _showFallbackAssignDialog(Order order, OrderProvider provider) async {
     final livreurProvider = context.read<LivreurProvider>();
     if (livreurProvider.livreurs.isEmpty) {
@@ -627,6 +1370,7 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text('Assigner un livreur'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -634,10 +1378,12 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
               DropdownButtonFormField<int>(
                 value: selectedLivreurId,
                 decoration: AppStyles.inputDecoration(label: 'Livreur', prefixIcon: Icons.delivery_dining),
-                items: livreurProvider.livreurs.map((l) => DropdownMenuItem(
-                  value: l.id,
-                  child: Text(l.nom ?? 'Sans nom'),
-                )).toList(),
+                items: livreurProvider.livreurs
+                    .map((l) => DropdownMenuItem(
+                          value: l.id,
+                          child: Text(l.nom),
+                        ))
+                    .toList(),
                 onChanged: (value) => setState(() => selectedLivreurId = value),
               ),
             ],
@@ -648,18 +1394,21 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
               child: const Text('Annuler'),
             ),
             ElevatedButton(
-              onPressed: selectedLivreurId == null ? null : () async {
-                final success = await provider.assignOrderToLivreur(order.id!, selectedLivreurId!);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(success ? 'Livreur assigné' : 'Erreur'),
-                      backgroundColor: success ? AppColors.success : AppColors.error,
-                    ),
-                  );
-                }
-              },
+              onPressed: selectedLivreurId == null
+                  ? null
+                  : () async {
+                      final success = await provider.assignOrderToLivreur(order.id!, selectedLivreurId!);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(success ? 'Livreur assigné' : 'Erreur'),
+                            backgroundColor: success ? AppColors.success : AppColors.error,
+                          ),
+                        );
+                        if (success) provider.refreshCurrentPage();
+                      }
+                    },
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
               child: const Text('Assigner', style: TextStyle(color: Colors.white)),
             ),
@@ -669,114 +1418,217 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
     );
   }
 
+  // ── Order Details Bottom Sheet ──────────────────────────────
   Future<void> _showOrderDetails(Order order) async {
+    final dateFormat = DateFormat('dd MMM yyyy, HH:mm', 'fr_FR');
+
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
+        initialChildSize: 0.65,
         minChildSize: 0.4,
-        maxChildSize: 0.9,
+        maxChildSize: 0.92,
         expand: false,
-        builder: (context, scrollController) => SingleChildScrollView(
-          controller: scrollController,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SingleChildScrollView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Text('Commande #${order.id}', style: AppStyles.headingMedium),
-              const SizedBox(height: 16),
-              _buildDetailRow('Statut', order.status ?? 'N/A'),
-              _buildDetailRow('Client', order.clientNom ?? 'Client #${order.clientId}'),
-              if (order.clientPhone != null)
-                _buildDetailRow('Téléphone', order.clientPhone!),
-              if (order.clientEmail != null)
-                _buildDetailRow('Email', order.clientEmail!),
-              _buildDetailRow('Livreur', order.livreurNom ?? (order.livreurId != null ? 'Livreur #${order.livreurId}' : 'Non assigné')),
-              _buildDetailRow('Dépôt', order.depotNom ?? (order.depotId != null ? 'Dépôt #${order.depotId}' : 'N/A')),
-              _buildDetailRow('Montant Total', '${order.montantTTC?.toStringAsFixed(2) ?? "0.00"} TND'),
-              _buildDetailRow('Date création', order.dateCommande?.toString().substring(0, 10) ?? 'N/A'),
-              if (order.adresseLivraison != null)
-                _buildDetailRow('Adresse', order.adresseLivraison!),
-              _buildDetailRow('Notes', order.notes ?? 'Aucune note'),
-              if (order.items != null && order.items!.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text('Articles (${order.items!.length})', style: AppStyles.headingSmall),
-                const SizedBox(height: 8),
-                ...order.items!.map((item) => Card(
-                  child: ListTile(
-                    title: Text(item.displayName),
-                    subtitle: Text('Quantité: ${item.quantite}'),
-                    trailing: Text('${item.montantTTC?.toStringAsFixed(2) ?? item.prixUnitaireTTC?.toStringAsFixed(2) ?? "0.00"} TND'),
-                  ),
-                )),
+                // Title
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.receipt_long, color: AppColors.primary, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                            Text('Commande CMD ${order.id}',
+                              style: AppStyles.headingSmall.copyWith(fontSize: 18)),
+                          if (order.dateCommande != null)
+                            Text(dateFormat.format(order.dateCommande!),
+                                style: AppStyles.caption.copyWith(color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildDetailCard('Informations', [
+                  _buildDetailItem(Icons.label, 'Statut', order.statusLabel),
+                  _buildDetailItem(Icons.person_outline, 'Client',
+                      order.clientNom ?? 'Client #${order.clientId}'),
+                  if (order.clientPhone != null)
+                    _buildDetailItem(Icons.phone, 'Téléphone', order.clientPhone!),
+                  if (order.clientEmail != null)
+                    _buildDetailItem(Icons.email, 'Email', order.clientEmail!),
+                  _buildDetailItem(
+                      Icons.delivery_dining,
+                      'Livreur',
+                      order.livreurNom ??
+                          (order.livreurId != null ? 'Livreur #${order.livreurId}' : 'Non assigné')),
+                  _buildDetailItem(Icons.warehouse, 'Dépôt',
+                      order.depotNom ?? (order.depotId != null ? 'Dépôt #${order.depotId}' : 'N/A')),
+                ]),
+                const SizedBox(height: 12),
+                _buildDetailCard('Montants', [
+                  _buildDetailItem(
+                      Icons.payments, 'Total TTC', '${order.montantTTC?.toStringAsFixed(2) ?? "0.00"} TND'),
+                  if (order.montantHT != null)
+                    _buildDetailItem(Icons.receipt, 'HT', '${order.montantHT!.toStringAsFixed(2)} TND'),
+                  if (order.montantTVA != null)
+                    _buildDetailItem(Icons.percent, 'TVA', '${order.montantTVA!.toStringAsFixed(2)} TND'),
+                ]),
+                if (order.adresseLivraison != null) ...[
+                  const SizedBox(height: 12),
+                  _buildDetailCard('Livraison', [
+                    _buildDetailItem(Icons.location_on, 'Adresse', order.adresseLivraison!),
+                    if (order.notes != null && order.notes!.isNotEmpty)
+                      _buildDetailItem(Icons.note, 'Notes', order.notes!),
+                  ]),
+                ],
+                if (order.items != null && order.items!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text('Articles (${order.items!.length})',
+                      style: AppStyles.headingSmall.copyWith(fontSize: 16)),
+                  const SizedBox(height: 8),
+                  ...order.items!.map((item) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.inventory_2, size: 18, color: AppColors.primary),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.displayName,
+                                      style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                                  Text('Quantité: ${item.quantite}', style: AppStyles.caption),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${item.montantTTC?.toStringAsFixed(2) ?? "0.00"} TND',
+                              style: AppStyles.bodyMedium
+                                  .copyWith(fontWeight: FontWeight.w700, color: AppColors.accent),
+                            ),
+                          ],
+                        ),
+                      )),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildDetailCard(String title, List<Widget> items) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
-          Text(value, style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w500)),
+          Text(title,
+              style: AppStyles.bodyMedium
+                  .copyWith(fontWeight: FontWeight.w700, color: AppColors.primary)),
+          const SizedBox(height: 8),
+          ...items,
         ],
       ),
     );
   }
 
+  Widget _buildDetailItem(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: AppColors.textSecondary),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 80,
+            child: Text(label, style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+          ),
+          Expanded(
+            child: Text(value, style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w500)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Create Order Dialog ─────────────────────────────────────
   Future<void> _showCreateOrderDialog(BuildContext context) async {
     final latController = TextEditingController();
     final lngController = TextEditingController();
     final adresseController = TextEditingController();
     final notesController = TextEditingController();
-    
-    // Clients list
+
     List<Client> clients = [];
     Client? selectedClient;
     bool loadingClients = true;
 
-    // Products with stock from the API
     List<Map<String, dynamic>> productsStock = [];
-    // Selected items: [{produitId, produitNom, prixHT, quantite, depotStocks: [...]}]
     List<Map<String, dynamic>> selectedItems = [];
     bool loadingProducts = true;
 
-    // Collection plan mode: 'auto' or 'manual'
-    String planMode = 'auto';
-    // Manual depot assignments per product index:
-    //   { productIndex: [ { depotId, depotNom, depotLatitude, depotLongitude, quantite } ] }
     Map<int, List<Map<String, dynamic>>> manualAssignments = {};
 
-    // Load clients and products BEFORE showing dialog to avoid display issues
     final orderProvider = context.read<OrderProvider>();
     final clientService = ClientService();
-    
+
     try {
       clients = await clientService.getAll();
     } catch (_) {}
     loadingClients = false;
-    
+
     await orderProvider.loadProductsStock();
     productsStock = orderProvider.productsStock;
     loadingProducts = false;
@@ -787,37 +1639,36 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-
           double totalHT = 0;
           for (var item in selectedItems) {
             totalHT += (item['prixHT'] ?? 0.0) * (item['quantite'] ?? 1);
           }
 
           return AlertDialog(
-            title: Row(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
               children: [
                 Icon(Icons.shopping_bag, color: AppColors.primary),
-                const SizedBox(width: 8),
-                const Text('Nouvelle commande'),
+                SizedBox(width: 8),
+                Expanded(child: Text('Nouvelle commande')),
               ],
             ),
             content: SizedBox(
-              width: MediaQuery.of(context).size.width * 0.6,
+              width: MediaQuery.of(context).size.width * 0.85,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Section 1: Client info
-                    Text('Informations client', style: AppStyles.headingSmall),
+                    Text('Client', style: AppStyles.headingSmall.copyWith(fontSize: 16)),
                     const SizedBox(height: 8),
                     if (loadingClients)
                       const Center(child: CircularProgressIndicator())
                     else
                       DropdownButtonFormField<Client>(
                         value: selectedClient,
-                        decoration: AppStyles.inputDecoration(label: 'Client *', prefixIcon: Icons.person)
-                            .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                        decoration:
+                            AppStyles.inputDecoration(label: 'Client *', prefixIcon: Icons.person),
                         isExpanded: true,
                         style: AppStyles.bodyMedium,
                         items: clients.map((client) {
@@ -826,11 +1677,8 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                               : client.email ?? 'Client #${client.id}';
                           return DropdownMenuItem<Client>(
                             value: client,
-                            child: Text(
-                              '#${client.id} - $displayName',
-                              overflow: TextOverflow.ellipsis,
-                              style: AppStyles.bodyMedium,
-                            ),
+                            child:
+                                Text('#${client.id} - $displayName', overflow: TextOverflow.ellipsis),
                           );
                         }).toList(),
                         onChanged: (client) {
@@ -851,8 +1699,8 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                           child: TextField(
                             controller: latController,
                             style: AppStyles.bodyMedium,
-                            decoration: AppStyles.inputDecoration(label: 'Latitude', prefixIcon: Icons.location_on)
-                                .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                            decoration: AppStyles.inputDecoration(
+                                label: 'Latitude', prefixIcon: Icons.location_on),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           ),
                         ),
@@ -861,8 +1709,8 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                           child: TextField(
                             controller: lngController,
                             style: AppStyles.bodyMedium,
-                            decoration: AppStyles.inputDecoration(label: 'Longitude', prefixIcon: Icons.location_on)
-                                .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                            decoration: AppStyles.inputDecoration(
+                                label: 'Longitude', prefixIcon: Icons.location_on),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           ),
                         ),
@@ -872,21 +1720,18 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                     TextField(
                       controller: adresseController,
                       style: AppStyles.bodyMedium,
-                      decoration: AppStyles.inputDecoration(label: 'Adresse de livraison', prefixIcon: Icons.home)
-                          .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                      decoration: AppStyles.inputDecoration(
+                          label: 'Adresse de livraison', prefixIcon: Icons.home),
                     ),
                     const SizedBox(height: 16),
-                    
-                    // Section 2: Products
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Produits', style: AppStyles.headingSmall),
+                        Text('Produits', style: AppStyles.headingSmall.copyWith(fontSize: 16)),
                         if (!loadingProducts)
                           ElevatedButton.icon(
-                            onPressed: () {
-                              _showProductPicker(context, productsStock, selectedItems, setState);
-                            },
+                            onPressed: () =>
+                                _showProductPicker(context, productsStock, selectedItems, setState),
                             icon: const Icon(Icons.add, size: 18),
                             label: const Text('Ajouter'),
                             style: ElevatedButton.styleFrom(
@@ -908,416 +1753,67 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Center(
-                          child: Text('Aucun produit ajouté', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
-                        ),
+                            child: Text('Aucun produit ajouté', style: AppStyles.bodySmall)),
                       )
                     else
                       ...selectedItems.asMap().entries.map((entry) {
                         final idx = entry.key;
                         final item = entry.value;
                         return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            title: Text(item['produitNom'] ?? 'Produit',
+                                style: AppStyles.bodyMedium),
+                            subtitle: Text(
+                                '${(item['prixHT'] ?? 0.0).toStringAsFixed(2)} TND x ${item['quantite']}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                // Left: product info (title, price, stock)
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        item['produitNom'] ?? 'Produit #${item['produitId']}',
-                                        style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        'Prix: ${(item['prixHT'] ?? 0.0).toStringAsFixed(2)} TND',
-                                        style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Stock total: ${item['totalStock'] ?? 0}',
-                                        style: AppStyles.caption.copyWith(color: AppColors.textSecondary),
-                                      ),
-                                    ],
-                                  ),
+                                IconButton(
+                                  icon: const Icon(Icons.remove, size: 18),
+                                  onPressed: () {
+                                    setState(() {
+                                      if ((item['quantite'] as int) > 1) {
+                                        item['quantite'] = (item['quantite'] as int) - 1;
+                                      }
+                                    });
+                                  },
                                 ),
-
-                                const SizedBox(width: 12),
-
-                                // Right: quantity controls and delete (fixed width)
-                                SizedBox(
-                                  width: 120,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.remove_circle_outline, size: 20),
-                                            onPressed: () {
-                                              setState(() {
-                                                if ((item['quantite'] as int) > 1) {
-                                                  item['quantite'] = (item['quantite'] as int) - 1;
-                                                }
-                                              });
-                                            },
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                                            child: Text('${item['quantite']}', style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.add_circle_outline, size: 20),
-                                            onPressed: () {
-                                              setState(() {
-                                                item['quantite'] = (item['quantite'] as int) + 1;
-                                              });
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: IconButton(
-                                          icon: Icon(Icons.delete_outline, size: 20, color: AppColors.error),
-                                          onPressed: () {
-                                            setState(() {
-                                              selectedItems.removeAt(idx);
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                Text('${item['quantite']}',
+                                    style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                                IconButton(
+                                  icon: const Icon(Icons.add, size: 18),
+                                  onPressed: () {
+                                    setState(
+                                        () => item['quantite'] = (item['quantite'] as int) + 1);
+                                  },
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.delete_outline,
+                                      size: 18, color: AppColors.error),
+                                  onPressed: () => setState(() => selectedItems.removeAt(idx)),
                                 ),
                               ],
                             ),
                           ),
                         );
                       }),
-                    
                     if (selectedItems.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerRight,
                         child: Text(
                           'Total HT: ${totalHT.toStringAsFixed(2)} TND',
-                          style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold, color: AppColors.primary),
+                          style: AppStyles.bodyLarge
+                              .copyWith(fontWeight: FontWeight.bold, color: AppColors.primary),
                         ),
                       ),
                     ],
-                    
-                    // ── Section 3: Plan de collection ─────────────────
-                    if (selectedItems.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      Text('Plan de collection', style: AppStyles.headingSmall),
-                      const SizedBox(height: 8),
-                      // Toggle auto / manual
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() { planMode = 'auto'; manualAssignments.clear(); }),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: planMode == 'auto' ? AppColors.primary : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.auto_awesome, size: 18,
-                                        color: planMode == 'auto' ? Colors.white : AppColors.textSecondary),
-                                      const SizedBox(width: 6),
-                                      Text('Automatique',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600, fontSize: 13,
-                                          color: planMode == 'auto' ? Colors.white : AppColors.textSecondary,
-                                        )),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() { planMode = 'manual'; }),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: planMode == 'manual' ? AppColors.primary : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.touch_app, size: 18,
-                                        color: planMode == 'manual' ? Colors.white : AppColors.textSecondary),
-                                      const SizedBox(width: 6),
-                                      Text('Manuel',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600, fontSize: 13,
-                                          color: planMode == 'manual' ? Colors.white : AppColors.textSecondary,
-                                        )),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (planMode == 'auto')
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.blue.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Le système choisira automatiquement les dépôts optimaux (minimum de dépôts + trajet le plus court).',
-                                  style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (planMode == 'manual') ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.info_outline, size: 18, color: Colors.orange.shade700),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Choisissez le dépôt source pour chaque produit. Le livreur suivra ce plan.',
-                                  style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Per-product depot picker
-                        ...selectedItems.asMap().entries.map((entry) {
-                          final idx = entry.key;
-                          final item = entry.value;
-                          final depotStocks = (item['depotStocks'] as List?) ?? [];
-                          final needed = item['quantite'] as int;
-                          final assignments = manualAssignments[idx] ?? [];
-                          final assignedTotal = assignments.fold<int>(0, (s, a) => s + ((a['quantite'] as int?) ?? 0));
-                          final fulfilled = assignedTotal >= needed;
-                          
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: fulfilled ? AppColors.success.withOpacity(0.5) : Colors.orange.shade300,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Theme(
-                              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                              child: ExpansionTile(
-                                initiallyExpanded: true,
-                                tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-                                title: Row(
-                                  children: [
-                                    Icon(
-                                      fulfilled ? Icons.check_circle : Icons.warning_amber_rounded,
-                                      size: 20,
-                                      color: fulfilled ? AppColors.success : Colors.orange,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        item['produitNom'] ?? 'Produit',
-                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: fulfilled ? AppColors.success.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        '$assignedTotal / $needed',
-                                        style: TextStyle(
-                                          fontSize: 12, fontWeight: FontWeight.w600,
-                                          color: fulfilled ? AppColors.success : Colors.orange.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                                    child: Column(
-                                      children: depotStocks.map<Widget>((depot) {
-                                        final depotId = depot['depotId'];
-                                        final depotNom = depot['depotNom'] ?? 'Dépôt #$depotId';
-                                        final available = (depot['quantiteDisponible'] as num?)?.toInt() ?? 0;
-                                        // Find this depot's current assignment
-                                        final existingIdx = assignments.indexWhere((a) => a['depotId'] == depotId);
-                                        final isAssigned = existingIdx >= 0;
-                                        final assignedQty = isAssigned ? (assignments[existingIdx]['quantite'] as int) : 0;
-                                        
-                                        return Container(
-                                          margin: const EdgeInsets.only(top: 6),
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                          decoration: BoxDecoration(
-                                            color: isAssigned ? AppColors.primary.withOpacity(0.05) : Colors.grey.shade50,
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: isAssigned ? AppColors.primary.withOpacity(0.3) : Colors.grey.shade200,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              // Depot info
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(depotNom,
-                                                      style: TextStyle(
-                                                        fontWeight: FontWeight.w600, fontSize: 13,
-                                                        color: isAssigned ? AppColors.primary : AppColors.textPrimary,
-                                                      )),
-                                                    Text('Disponible: $available',
-                                                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                                                  ],
-                                                ),
-                                              ),
-                                              // Quantity controls
-                                              if (isAssigned) ...[
-                                                IconButton(
-                                                  icon: const Icon(Icons.remove_circle_outline, size: 22),
-                                                  color: AppColors.primary,
-                                                  padding: EdgeInsets.zero,
-                                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                  onPressed: () {
-                                                    setState(() {
-                                                      if (assignedQty <= 1) {
-                                                        assignments.removeAt(existingIdx);
-                                                        if (assignments.isEmpty) manualAssignments.remove(idx);
-                                                      } else {
-                                                        assignments[existingIdx]['quantite'] = assignedQty - 1;
-                                                      }
-                                                    });
-                                                  },
-                                                ),
-                                                Container(
-                                                  width: 32,
-                                                  alignment: Alignment.center,
-                                                  child: Text('$assignedQty',
-                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(Icons.add_circle_outline, size: 22),
-                                                  color: AppColors.primary,
-                                                  padding: EdgeInsets.zero,
-                                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                  onPressed: () {
-                                                    setState(() {
-                                                      if (assignedQty < available) {
-                                                        assignments[existingIdx]['quantite'] = assignedQty + 1;
-                                                      }
-                                                    });
-                                                  },
-                                                ),
-                                                IconButton(
-                                                  icon: Icon(Icons.close, size: 18, color: AppColors.error),
-                                                  padding: EdgeInsets.zero,
-                                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                                  onPressed: () {
-                                                    setState(() {
-                                                      assignments.removeAt(existingIdx);
-                                                      if (assignments.isEmpty) manualAssignments.remove(idx);
-                                                    });
-                                                  },
-                                                ),
-                                              ] else
-                                                TextButton.icon(
-                                                  onPressed: available <= 0 ? null : () {
-                                                    setState(() {
-                                                      final remaining = needed - assignedTotal;
-                                                      final qty = remaining > 0 ? (remaining <= available ? remaining : available) : 1;
-                                                      final newAssignment = {
-                                                        'depotId': depotId,
-                                                        'depotNom': depotNom,
-                                                        'depotLatitude': depot['depotLatitude'],
-                                                        'depotLongitude': depot['depotLongitude'],
-                                                        'quantite': qty > available ? available : qty,
-                                                      };
-                                                      manualAssignments.putIfAbsent(idx, () => []);
-                                                      manualAssignments[idx]!.add(newAssignment);
-                                                    });
-                                                  },
-                                                  icon: Icon(Icons.add, size: 16, color: available <= 0 ? Colors.grey : AppColors.primary),
-                                                  label: Text(
-                                                    available <= 0 ? 'Rupture' : 'Sélectionner',
-                                                    style: TextStyle(fontSize: 12, color: available <= 0 ? Colors.grey : AppColors.primary),
-                                                  ),
-                                                  style: TextButton.styleFrom(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                    minimumSize: Size.zero,
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ],
-                    
                     const SizedBox(height: 12),
                     TextField(
                       controller: notesController,
-                      decoration: AppStyles.inputDecoration(label: 'Notes', prefixIcon: Icons.note),
+                      decoration:
+                          AppStyles.inputDecoration(label: 'Notes', prefixIcon: Icons.note),
                       maxLines: 2,
                     ),
                   ],
@@ -1326,74 +1822,55 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Annuler'),
-              ),
+                  onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
               ElevatedButton(
                 onPressed: () async {
                   if (selectedClient == null || selectedClient!.id == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Veuillez sélectionner un client'), backgroundColor: AppColors.error),
+                      const SnackBar(
+                          content: Text('Veuillez sélectionner un client'),
+                          backgroundColor: AppColors.error),
                     );
                     return;
                   }
-
-                  // Validate manual assignments if manual mode
-                  if (planMode == 'manual' && selectedItems.isNotEmpty) {
-                    for (int i = 0; i < selectedItems.length; i++) {
-                      final item = selectedItems[i];
-                      final needed = item['quantite'] as int;
-                      final assignments = manualAssignments[i] ?? [];
-                      final assignedTotal = assignments.fold<int>(0, (s, a) => s + ((a['quantite'] as int?) ?? 0));
-                      if (assignedTotal < needed) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Quantité insuffisante pour "${item['produitNom']}" ($assignedTotal / $needed)'),
-                            backgroundColor: AppColors.error,
-                          ),
-                        );
-                        return;
-                      }
-                    }
-                  }
-
-                  final clientId = selectedClient!.id!;
                   final lat = double.tryParse(latController.text);
                   final lng = double.tryParse(lngController.text);
+                  final items = selectedItems
+                      .map((item) => OrderItem(
+                            produitId: item['produitId'] as int,
+                            quantite: item['quantite'] as int,
+                          ))
+                      .toList();
 
-                  final items = selectedItems.map((item) => OrderItem(
-                    produitId: item['produitId'] as int,
-                    quantite: item['quantite'] as int,
-                  )).toList();
-
-                  // Build manual collection plan JSON if manual mode
                   String? collectionPlanJson;
-                  if (planMode == 'manual' && manualAssignments.isNotEmpty) {
-                    collectionPlanJson = _buildManualCollectionPlan(selectedItems, manualAssignments);
+                  if (manualAssignments.isNotEmpty) {
+                    collectionPlanJson =
+                        _buildManualCollectionPlan(selectedItems, manualAssignments);
                   }
 
                   final provider = context.read<OrderProvider>();
                   final order = Order(
-                    clientId: clientId,
+                    clientId: selectedClient!.id!,
                     latitudeLivraison: lat,
                     longitudeLivraison: lng,
-                    adresseLivraison: adresseController.text.isEmpty ? null : adresseController.text,
+                    adresseLivraison:
+                        adresseController.text.isEmpty ? null : adresseController.text,
                     notes: notesController.text.isEmpty ? null : notesController.text,
                     status: 'pending',
                     items: items.isNotEmpty ? items : null,
                     collectionPlan: collectionPlanJson,
                   );
-
                   final success = await provider.createOrder(order);
                   if (context.mounted) {
                     Navigator.pop(context);
-                    final modeLabel = planMode == 'manual' ? ' (plan manuel)' : '';
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(success ? 'Commande créée avec ${items.length} produit(s)$modeLabel' : 'Erreur: ${provider.errorMessage}'),
+                        content: Text(
+                            success ? 'Commande créée' : 'Erreur: ${provider.errorMessage}'),
                         backgroundColor: success ? AppColors.success : AppColors.error,
                       ),
                     );
+                    if (success) provider.refreshCurrentPage();
                   }
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
@@ -1406,28 +1883,26 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
     );
   }
 
-  /// Build collection plan JSON from manual depot assignments.
-  /// Format matches backend's mergedSteps: group items by depot.
   String _buildManualCollectionPlan(
     List<Map<String, dynamic>> selectedItems,
     Map<int, List<Map<String, dynamic>>> manualAssignments,
   ) {
-    // Group by depotId → list of items
     final Map<int, Map<String, dynamic>> depotSteps = {};
-
     for (final entry in manualAssignments.entries) {
       final productIdx = entry.key;
       final item = selectedItems[productIdx];
       for (final assignment in entry.value) {
         final depotId = assignment['depotId'] as int;
-        depotSteps.putIfAbsent(depotId, () => {
-          'depotId': depotId,
-          'depotNom': assignment['depotNom'],
-          'depotLatitude': assignment['depotLatitude'],
-          'depotLongitude': assignment['depotLongitude'],
-          'items': <Map<String, dynamic>>[],
-          'orderIds': <int>[],
-        });
+        depotSteps.putIfAbsent(
+            depotId,
+            () => {
+                  'depotId': depotId,
+                  'depotNom': assignment['depotNom'],
+                  'depotLatitude': assignment['depotLatitude'],
+                  'depotLongitude': assignment['depotLongitude'],
+                  'items': <Map<String, dynamic>>[],
+                  'orderIds': <int>[],
+                });
         (depotSteps[depotId]!['items'] as List).add({
           'produitId': item['produitId'],
           'produitNom': item['produitNom'],
@@ -1435,14 +1910,11 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
         });
       }
     }
-
-    // Build steps array with step indices (1-based for consistency)
     final steps = depotSteps.values.toList().asMap().entries.map((e) {
       final step = Map<String, dynamic>.from(e.value);
       step['step'] = e.key + 1;
       return step;
     }).toList();
-
     return jsonEncode(steps);
   }
 
@@ -1453,7 +1925,6 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
     StateSetter parentSetState,
   ) {
     final searchController = TextEditingController();
-    
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -1464,55 +1935,56 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
             final ref = (p['produitReference'] ?? '').toString().toLowerCase();
             return nom.contains(query) || ref.contains(query);
           }).toList();
-
-          // Already selected product IDs
           final selectedIds = selectedItems.map((e) => e['produitId']).toSet();
 
           return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Sélectionner un produit'),
             content: SizedBox(
-              width: MediaQuery.of(context).size.width * 0.5,
+              width: MediaQuery.of(context).size.width * 0.85,
               height: MediaQuery.of(context).size.height * 0.5,
               child: Column(
                 children: [
                   TextField(
                     controller: searchController,
-                    decoration: AppStyles.inputDecoration(label: 'Rechercher...', prefixIcon: Icons.search),
+                    decoration: AppStyles.inputDecoration(
+                        label: 'Rechercher...', prefixIcon: Icons.search),
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: filtered.isEmpty
-                        ? Center(child: Text('Aucun produit disponible', style: AppStyles.bodyMedium))
+                        ? Center(child: Text('Aucun produit', style: AppStyles.bodyMedium))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (context, index) {
                               final product = filtered[index];
                               final pid = product['produitId'];
                               final isSelected = selectedIds.contains(pid);
-                              final totalStock = product['totalStock'];
-                              
                               return ListTile(
                                 leading: Icon(
-                                  isSelected ? Icons.check_circle : Icons.inventory_2,
-                                  color: isSelected ? AppColors.success : AppColors.primary,
-                                ),
-                                title: Text(product['produitNom'] ?? 'Produit #$pid'),
-                                subtitle: Text('Réf: ${product['produitReference'] ?? 'N/A'} | Prix: ${(product['prixHT'] ?? 0).toStringAsFixed(2)} TND | Stock: $totalStock'),
+                                    isSelected ? Icons.check_circle : Icons.inventory_2,
+                                    color: isSelected ? AppColors.success : AppColors.primary),
+                                title:
+                                    Text(product['produitNom'] ?? 'Produit #$pid'),
+                                subtitle: Text(
+                                    'Prix: ${(product['prixHT'] ?? 0).toStringAsFixed(2)} TND | Stock: ${product['totalStock']}'),
                                 enabled: !isSelected,
-                                onTap: isSelected ? null : () {
-                                  parentSetState(() {
-                                    selectedItems.add({
-                                      'produitId': pid,
-                                      'produitNom': product['produitNom'],
-                                      'prixHT': (product['prixHT'] ?? 0).toDouble(),
-                                      'totalStock': totalStock,
-                                      'depotStocks': product['depotStocks'] ?? [],
-                                      'quantite': 1,
-                                    });
-                                  });
-                                  Navigator.pop(context);
-                                },
+                                onTap: isSelected
+                                    ? null
+                                    : () {
+                                        parentSetState(() {
+                                          selectedItems.add({
+                                            'produitId': pid,
+                                            'produitNom': product['produitNom'],
+                                            'prixHT': (product['prixHT'] ?? 0).toDouble(),
+                                            'totalStock': product['totalStock'],
+                                            'depotStocks': product['depotStocks'] ?? [],
+                                            'quantite': 1,
+                                          });
+                                        });
+                                        Navigator.pop(context);
+                                      },
                               );
                             },
                           ),
@@ -1522,13 +1994,19 @@ class _OrderListScreenState extends State<OrderListScreen> with SingleTickerProv
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Fermer'),
-              ),
+                  onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
             ],
           );
         },
       ),
     );
   }
+}
+
+class _StatusInfo {
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  _StatusInfo(this.label, this.icon, this.color);
 }

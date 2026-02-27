@@ -7,4 +7,5 @@ export 'produit.dart';
 export 'stock.dart';
 export 'client.dart';
 export 'order.dart';
+export 'page_response.dart';
 export 'notification.dart';

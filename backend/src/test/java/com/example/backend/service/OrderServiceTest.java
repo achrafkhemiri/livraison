@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.dto.OrderDTO;
+import com.example.backend.dto.PageResponse;
 import com.example.backend.exception.ResourceNotFoundException;
 import com.example.backend.mapper.OrderMapper;
 import com.example.backend.model.*;
@@ -12,8 +13,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +48,8 @@ class OrderServiceTest {
     private ProduitRepository produitRepository;
     @Mock
     private OrderMapper orderMapper;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -305,5 +313,131 @@ class OrderServiceTest {
         // When / Then
         assertThatThrownBy(() -> orderService.delete(999L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ========================
+    // searchOrders tests
+    // ========================
+
+    @Test
+    void searchOrders_shouldReturnPaginatedResults() {
+        // Given
+        Order order2 = new Order();
+        order2.setId(2L);
+        order2.setNumero("CMD20250102130000");
+        order2.setStatus("delivered");
+        order2.setItems(new ArrayList<>());
+
+        Page<Order> page = new PageImpl<>(List.of(order, order2));
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        when(orderMapper.toDTO(order)).thenReturn(orderDTO);
+        when(orderMapper.toDTO(order2)).thenReturn(OrderDTO.builder().id(2L).status("delivered").build());
+
+        // When
+        PageResponse<OrderDTO> result = orderService.searchOrders(null, null, null, null, null, 0, 10);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.isFirst()).isTrue();
+        assertThat(result.isLast()).isTrue();
+    }
+
+    @Test
+    void searchOrders_emptyResults_shouldReturnEmptyPage() {
+        // Given
+        Page<Order> emptyPage = new PageImpl<>(List.of());
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(emptyPage);
+
+        // When
+        PageResponse<OrderDTO> result = orderService.searchOrders(1L, null, null, null, null, 0, 10);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
+    }
+
+    @Test
+    void searchOrders_withStatusFilter_shouldCallRepository() {
+        // Given
+        Page<Order> page = new PageImpl<>(List.of(order));
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        when(orderMapper.toDTO(any(Order.class))).thenReturn(orderDTO);
+
+        // When
+        PageResponse<OrderDTO> result = orderService.searchOrders(1L, null, "pending", null, null, 0, 10);
+
+        // Then
+        assertThat(result.getContent()).hasSize(1);
+        verify(orderRepository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void searchOrders_withSearchQuery_shouldCallRepository() {
+        // Given
+        Page<Order> page = new PageImpl<>(List.of(order));
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        when(orderMapper.toDTO(any(Order.class))).thenReturn(orderDTO);
+
+        // When
+        PageResponse<OrderDTO> result = orderService.searchOrders(null, "CMD2025", null, null, null, 0, 10);
+
+        // Then
+        assertThat(result.getContent()).hasSize(1);
+        verify(orderRepository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void searchOrders_withDateRange_shouldCallRepository() {
+        // Given
+        LocalDate dateFrom = LocalDate.of(2025, 1, 1);
+        LocalDate dateTo = LocalDate.of(2025, 12, 31);
+        Page<Order> page = new PageImpl<>(List.of(order));
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        when(orderMapper.toDTO(any(Order.class))).thenReturn(orderDTO);
+
+        // When
+        PageResponse<OrderDTO> result = orderService.searchOrders(null, null, null, dateFrom, dateTo, 0, 10);
+
+        // Then
+        assertThat(result.getContent()).hasSize(1);
+        verify(orderRepository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void searchOrders_withAllFilters_shouldCallRepository() {
+        // Given
+        Page<Order> page = new PageImpl<>(List.of(order));
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        when(orderMapper.toDTO(any(Order.class))).thenReturn(orderDTO);
+
+        // When
+        PageResponse<OrderDTO> result = orderService.searchOrders(
+                1L, "CMD2025", "pending",
+                LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31),
+                0, 10);
+
+        // Then
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getPage()).isZero();
+        assertThat(result.getSize()).isEqualTo(2); // PageImpl default pageSize
+    }
+
+    @Test
+    void searchOrders_pageMetadata_shouldBeCorrect() {
+        // Given
+        Page<Order> page = new PageImpl<>(List.of(order));
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        when(orderMapper.toDTO(any(Order.class))).thenReturn(orderDTO);
+
+        // When
+        PageResponse<OrderDTO> result = orderService.searchOrders(null, null, null, null, null, 0, 10);
+
+        // Then
+        assertThat(result.isFirst()).isTrue();
+        assertThat(result.isLast()).isTrue();
+        assertThat(result.getTotalPages()).isEqualTo(1);
     }
 }

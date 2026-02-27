@@ -13,6 +13,20 @@ class OrderProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Pagination state
+  List<Order> _paginatedOrders = [];
+  int _currentPage = 0;
+  int _pageSize = 10;
+  int _totalElements = 0;
+  int _totalPages = 0;
+  bool _isFirstPage = true;
+  bool _isLastPage = true;
+  bool _isLoadingPage = false;
+  String? _searchQuery;
+  String? _statusFilter;
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
+
   // Map data
   Map<String, dynamic>? _mapData;
   List<Map<String, dynamic>> _productsStock = [];
@@ -28,6 +42,20 @@ class OrderProvider extends ChangeNotifier {
   Map<String, dynamic>? get mapData => _mapData;
   List<Map<String, dynamic>> get productsStock => _productsStock;
   Map<String, dynamic>? get collectionPlan => _collectionPlan;
+
+  // Pagination getters
+  List<Order> get paginatedOrders => _paginatedOrders;
+  int get currentPage => _currentPage;
+  int get pageSize => _pageSize;
+  int get totalElements => _totalElements;
+  int get totalPages => _totalPages;
+  bool get isFirstPage => _isFirstPage;
+  bool get isLastPage => _isLastPage;
+  bool get isLoadingPage => _isLoadingPage;
+  String? get searchQuery => _searchQuery;
+  String? get statusFilter => _statusFilter;
+  DateTime? get dateFrom => _dateFrom;
+  DateTime? get dateTo => _dateTo;
   
   // Statistics
   int get totalOrders => _orders.length;
@@ -51,6 +79,94 @@ class OrderProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  // Search orders with pagination (for Gérant)
+  Future<void> searchOrders({
+    int page = 0,
+    int? size,
+    String? search,
+    String? status,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async {
+    _isLoadingPage = true;
+    _errorMessage = null;
+    _currentPage = page;
+    if (size != null) _pageSize = size;
+    _searchQuery = search;
+    _statusFilter = status;
+    _dateFrom = dateFrom;
+    _dateTo = dateTo;
+    notifyListeners();
+
+    try {
+      final result = await _service.searchOrders(
+        page: _currentPage,
+        size: _pageSize,
+        search: _searchQuery,
+        status: _statusFilter,
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+      );
+      _paginatedOrders = result.content;
+      _totalElements = result.totalElements;
+      _totalPages = result.totalPages;
+      _isFirstPage = result.first;
+      _isLastPage = result.last;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoadingPage = false;
+      notifyListeners();
+    }
+  }
+
+  // Pagination helpers
+  Future<void> nextPage() async {
+    if (!_isLastPage) {
+      await searchOrders(
+        page: _currentPage + 1,
+        search: _searchQuery,
+        status: _statusFilter,
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+      );
+    }
+  }
+
+  Future<void> previousPage() async {
+    if (!_isFirstPage && _currentPage > 0) {
+      await searchOrders(
+        page: _currentPage - 1,
+        search: _searchQuery,
+        status: _statusFilter,
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+      );
+    }
+  }
+
+  Future<void> goToPage(int page) async {
+    if (page >= 0 && page < _totalPages) {
+      await searchOrders(
+        page: page,
+        search: _searchQuery,
+        status: _statusFilter,
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+      );
+    }
+  }
+
+  Future<void> refreshCurrentPage() async {
+    await searchOrders(
+      page: _currentPage,
+      search: _searchQuery,
+      status: _statusFilter,
+      dateFrom: _dateFrom,
+      dateTo: _dateTo,
+    );
   }
   
   // Load orders by status

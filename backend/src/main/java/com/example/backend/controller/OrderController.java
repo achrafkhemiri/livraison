@@ -1,15 +1,18 @@
 package com.example.backend.controller;
 
 import com.example.backend.dto.OrderDTO;
+import com.example.backend.dto.PageResponse;
 import com.example.backend.service.OrderService;
 import com.example.backend.service.SecurityService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -29,6 +32,19 @@ public class OrderController {
             return ResponseEntity.ok(orderService.findBySocieteId(societeId));
         }
         return ResponseEntity.ok(orderService.findAll());
+    }
+
+    @GetMapping("/search")
+    @PreAuthorize("hasRole('GERANT')")
+    public ResponseEntity<PageResponse<OrderDTO>> searchOrders(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
+        Long societeId = securityService.getCurrentUserSocieteId();
+        return ResponseEntity.ok(orderService.searchOrders(societeId, search, status, dateFrom, dateTo, page, size));
     }
     
     @GetMapping("/{id}")

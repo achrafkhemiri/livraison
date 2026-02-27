@@ -1,6 +1,7 @@
 import '../models/models.dart';
 import '../../core/constants/api_constants.dart';
 import 'api_service.dart';
+import 'package:intl/intl.dart';
 
 class OrderService {
   final ApiService _api = ApiService();
@@ -124,5 +125,29 @@ class OrderService {
   Future<List<Map<String, dynamic>>> recommendLivreurs(int orderId) async {
     final response = await _api.get('${ApiConstants.orders}/$orderId/recommend-livreurs');
     return (response as List).map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  /// Search orders with pagination, filtering, and search
+  Future<PageResponse<Order>> searchOrders({
+    int page = 0,
+    int size = 10,
+    String? search,
+    String? status,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async {
+    final dateFormat = DateFormat('yyyy-MM-dd');
+    final params = <String, String>{
+      'page': page.toString(),
+      'size': size.toString(),
+    };
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    if (status != null && status.isNotEmpty && status != 'all') params['status'] = status;
+    if (dateFrom != null) params['dateFrom'] = dateFormat.format(dateFrom);
+    if (dateTo != null) params['dateTo'] = dateFormat.format(dateTo);
+
+    final queryString = params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
+    final response = await _api.get('${ApiConstants.orders}/search?$queryString');
+    return PageResponse.fromJson(response as Map<String, dynamic>, Order.fromJson);
   }
 }
