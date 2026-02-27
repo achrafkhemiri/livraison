@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
 import '../../../data/models/models.dart';
@@ -23,8 +24,10 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   bool _isOptimizing = false;
   double _optimizationProgress = 0;
   String _optimizationStatus = '';
-  bool _showSidebar = true;
   late TabController _tabController;
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
+  double _sheetPosition = 0.4;
+  bool _isSheetExpanded = true; // Contrôle l'état du bottom sheet
   
   // Default center: Sfax, Tunisia
   static const LatLng _defaultCenter = LatLng(34.74, 10.76);
@@ -41,6 +44,16 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         );
       }
     });
+    
+    // Écouter les changements de position du sheet pour synchroniser l'état
+    _sheetController.addListener(() {
+      if (_sheetController.size > 0.25 && !_isSheetExpanded) {
+        setState(() => _isSheetExpanded = true);
+      } else if (_sheetController.size <= 0.25 && _isSheetExpanded) {
+        setState(() => _isSheetExpanded = false);
+      }
+    });
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initializeMap();
@@ -51,6 +64,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   @override
   void dispose() {
     _tabController.dispose();
+    _sheetController.dispose();
     super.dispose();
   }
 
@@ -137,112 +151,196 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Row(
+      backgroundColor: Colors.grey.shade100,
+      appBar: _buildModernAppBar(),
+      body: Stack(
         children: [
-          if (_showSidebar) _buildSidebar(),
-          Expanded(
-            child: Stack(
-              children: [
-                _buildMap(),
-                _buildTopControls(),
-                if (_isOptimizing) _buildOptimizationOverlay(),
-              ],
-            ),
-          ),
+          _buildMap(),
+          _buildFloatingControls(),
+          _buildBottomSheet(),
+          if (_isOptimizing) _buildOptimizationOverlay(),
         ],
       ),
     );
   }
 
-  // ================== SIDEBAR ==================
+  // ================== MODERN APP BAR ==================
 
-  Widget _buildSidebar() {
+  PreferredSizeWidget _buildModernAppBar() {
+    return AppBar(
+      elevation: 0,
+      backgroundColor: const Color(0xFF1a237e),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text('🚚', style: TextStyle(fontSize: 20)),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Smart Delivery',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Consumer<DeliveryRouteProvider>(
+                  builder: (context, provider, _) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: provider.isOsrmAvailable
+                          ? const Color(0xFF00e676).withOpacity(0.2)
+                          : Colors.orange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: provider.isOsrmAvailable
+                                ? const Color(0xFF00e676)
+                                : Colors.orange,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          provider.isOsrmAvailable ? 'OSRM' : 'Hors-ligne',
+                          style: GoogleFonts.poppins(
+                            fontSize: 9,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        Consumer<LivreurProvider>(
+          builder: (context, livreurProvider, _) => IconButton(
+            icon: const Icon(Icons.my_location, color: Colors.white),
+            tooltip: 'Ma position',
+            onPressed: () async {
+              final position = await livreurProvider.getCurrentPosition();
+              if (position != null && mounted) {
+                context.read<DeliveryRouteProvider>().setStartPosition(position);
+                _mapController.move(position, 14);
+              }
+            },
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.center_focus_strong, color: Colors.white),
+          tooltip: 'Tout voir',
+          onPressed: _fitAllMarkers,
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  // ================== BOTTOM SHEET ==================
+
+  Widget _buildBottomSheet() {
     return Consumer2<DeliveryRouteProvider, OrderProvider>(
       builder: (context, routeProvider, orderProvider, _) {
-        return Container(
-          width: 340,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF1a237e), Color(0xFF0d47a1)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 10,
-                offset: const Offset(2, 0),
+        return DraggableScrollableSheet(
+          controller: _sheetController,
+          initialChildSize: _isSheetExpanded ? 0.4 : 0.12,
+          minChildSize: 0.12,
+          maxChildSize: 0.85,
+          snap: true,
+          snapSizes: const [0.12, 0.4, 0.85],
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Column(
-            children: [
-              _buildSidebarHeader(routeProvider),
-              _buildModeTabs(),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildCollectContent(routeProvider, orderProvider),
-                    _buildDeliverContent(routeProvider),
-                  ],
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildSheetHandle(),
+                  _buildModeTabs(),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildCollectContent(routeProvider, orderProvider, scrollController),
+                        _buildDeliverContent(routeProvider, scrollController),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildSidebarHeader(DeliveryRouteProvider provider) {
+  Widget _buildSheetHandle() {
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.black.withOpacity(0.2)),
-      child: Column(
+      padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 8),
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('🚚', style: TextStyle(fontSize: 22)),
-              const SizedBox(width: 8),
-              Text('Smart Delivery', style: AppStyles.headingMedium.copyWith(color: Colors.white)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text('Plus Court Chemin - OSRM', style: AppStyles.bodySmall.copyWith(color: Colors.white70)),
-          const SizedBox(height: 10),
-          // OSRM Status
+          const Spacer(),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            width: 50,
+            height: 5,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: provider.isOsrmAvailable ? const Color(0xFF00e676) : const Color(0xFFff5252),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (provider.isOsrmAvailable ? const Color(0xFF00e676) : const Color(0xFFff5252)).withOpacity(0.5),
-                        blurRadius: 5,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
+          ),
+          const Spacer(),
+          // Bouton pour contrôler le bottom sheet
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: _toggleBottomSheet,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1a237e).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  provider.isOsrmAvailable ? 'OSRM Connecté ✓' : 'Mode Hors-ligne',
-                  style: AppStyles.caption.copyWith(color: Colors.white),
+                child: Icon(
+                  _isSheetExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                  color: const Color(0xFF1a237e),
+                  size: 20,
                 ),
-              ],
+              ),
             ),
           ),
         ],
@@ -252,36 +350,63 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   Widget _buildModeTabs() {
     return Container(
-      color: Colors.black.withOpacity(0.15),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: TabBar(
         controller: _tabController,
-        indicatorColor: Colors.white,
-        indicatorWeight: 3,
+        indicator: BoxDecoration(
+          color: const Color(0xFF1a237e),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1a237e).withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         labelColor: Colors.white,
-        unselectedLabelColor: Colors.white54,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 12),
+        unselectedLabelColor: Colors.grey.shade700,
+        labelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
+        unselectedLabelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
+        dividerColor: Colors.transparent,
         tabs: [
           Tab(
+            height: 44,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.inventory_2, size: 16),
-                const SizedBox(width: 5),
+                const Icon(Icons.inventory_2, size: 18),
+                const SizedBox(width: 6),
                 Consumer<DeliveryRouteProvider>(
-                  builder: (context, p, _) => Text('Collecter (${p.collectionStops.where((s) => !s.isCollected).expand((s) => s.orderIds).toSet().length})'),
+                  builder: (context, p, _) => Text(
+                    'Collecter (${p.collectionStops.where((s) => !s.isCollected).expand((s) => s.orderIds).toSet().length})',
+                  ),
                 ),
               ],
             ),
           ),
           Tab(
+            height: 44,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.local_shipping, size: 16),
-                const SizedBox(width: 5),
+                const Icon(Icons.local_shipping, size: 18),
+                const SizedBox(width: 6),
                 Consumer<DeliveryRouteProvider>(
-                  builder: (context, p, _) => Text('Livrer (${p.stops.where((s) => !s.isDelivered).length})'),
+                  builder: (context, p, _) => Text(
+                    'Livrer (${p.stops.where((s) => !s.isDelivered).length})',
+                  ),
                 ),
               ],
             ),
@@ -293,18 +418,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== COLLECT TAB ==================
 
-  Widget _buildCollectContent(DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
+  Widget _buildCollectContent(DeliveryRouteProvider routeProvider, OrderProvider orderProvider, ScrollController scrollController) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
+      controller: scrollController,
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildLivreurSection(),
-          const SizedBox(height: 12),
           _buildCollectionStopsSection(routeProvider, orderProvider),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _buildCollectionOptimizationSection(routeProvider),
           if (routeProvider.collectionRoutePoints.isNotEmpty)
             _buildCollectionResultsSection(routeProvider),
+          const SizedBox(height: 20),
         ],
       ),
     );
@@ -355,23 +480,34 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             // Order filter chips — show ALL available orders
             Wrap(
               spacing: 6,
-              runSpacing: 4,
+              runSpacing: 6,
               children: allAvailableOrderIds.map((oid) {
                 final selected = routeProvider.selectedCollectionIds.contains(oid);
                 return FilterChip(
-                  label: Text('CMD #$oid', style: TextStyle(fontSize: 11, color: selected ? Colors.white : Colors.white70)),
+                  label: Text(
+                    'CMD #$oid',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: selected ? Colors.white : const Color(0xFF1a237e),
+                    ),
+                  ),
                   selected: selected,
                   onSelected: (_) => routeProvider.toggleCollectionSelection(oid),
-                  selectedColor: Colors.orange.shade700,
-                  backgroundColor: Colors.white.withOpacity(0.12),
+                  selectedColor: Colors.orange.shade600,
+                  backgroundColor: Colors.grey.shade100,
                   checkmarkColor: Colors.white,
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  side: BorderSide(
+                    color: selected ? Colors.orange.shade600 : Colors.grey.shade300,
+                    width: 1.5,
+                  ),
                 );
               }).toList(),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             // "Recalculate" button — shown when selection changed
             if (needsRecompute)
               Container(
@@ -380,37 +516,62 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 child: ElevatedButton.icon(
                   onPressed: routeProvider.isLoading ? null : () => _recomputePlan(routeProvider),
                   icon: routeProvider.isLoading
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.refresh, size: 18),
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.refresh, size: 20),
                   label: Text(
-                    routeProvider.isLoading ? 'Calcul en cours...' : 'Recalculer le plan (${routeProvider.selectedCollectionIds.length} cmd)',
-                    style: const TextStyle(fontSize: 12),
+                    routeProvider.isLoading
+                        ? 'Calcul en cours...'
+                        : 'Recalculer le plan (${routeProvider.selectedCollectionIds.length} cmd)',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange.shade700,
+                    backgroundColor: Colors.orange.shade600,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
                 ),
               ),
           ],
           if (stops.isEmpty && !needsRecompute)
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  Icon(Icons.check_circle_outline, size: 40, color: Colors.white.withOpacity(0.3)),
-                  const SizedBox(height: 8),
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 48,
+                    color: Colors.grey.shade400,
+                  ),
+                  const SizedBox(height: 12),
                   Text(
                     selectedCount == 0
                         ? 'Sélectionnez des commandes puis recalculez'
                         : 'Rien à collecter',
-                    style: AppStyles.bodySmall.copyWith(color: Colors.white70),
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 4),
-                  Text('Les commandes collectées sont\ndans "À livrer"', style: AppStyles.caption.copyWith(color: Colors.white38), textAlign: TextAlign.center),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Les commandes collectées sont\ndans "À livrer"',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             )
@@ -437,53 +598,104 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     final isSelected = stop.orderIds.any((oid) => routeProvider.selectedCollectionIds.contains(oid));
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isSelected ? Colors.orange.withOpacity(0.25) : Colors.white.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: isSelected ? Border.all(color: Colors.orange, width: 1.5) : null,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isSelected ? Colors.orange.shade400 : Colors.grey.shade200,
+          width: isSelected ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isSelected
+                ? Colors.orange.withOpacity(0.2)
+                : Colors.grey.withOpacity(0.08),
+            blurRadius: isSelected ? 8 : 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: InkWell(
-        onTap: () => _showCollectionStopDetails(stop),
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade600,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      stop.depotName,
-                      style: AppStyles.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showCollectionStopDetails(stop),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.orange.shade600,
+                        Colors.orange.shade400,
+                      ],
                     ),
-                    Text(
-                      'CMD ${stop.orderIds.map((id) => '#$id').join(', ')}',
-                      style: AppStyles.caption.copyWith(color: Colors.orange.shade200, fontSize: 10),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${index + 1}',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                    ...stop.items.map((item) => Text(
-                      '${item.name} x${item.quantity} (CMD #${item.orderId})',
-                      style: AppStyles.caption.copyWith(color: Colors.white54, fontSize: 10),
-                    )),
-                  ],
+                  ),
                 ),
-              ),
-              _collectButton(stop, routeProvider, orderProvider),
-            ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        stop.depotName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1a237e),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'CMD ${stop.orderIds.map((id) => '#$id').join(', ')}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.orange.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      ...stop.items.map((item) => Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          '${item.name} x${item.quantity} (CMD #${item.orderId})',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      )),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _collectButton(stop, routeProvider, orderProvider),
+              ],
+            ),
           ),
         ),
       ),
@@ -491,18 +703,22 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   }
 
   Widget _collectButton(CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
-    return SizedBox(
-      height: 28,
-      child: ElevatedButton.icon(
-        onPressed: () => _markCollected(stop, routeProvider, orderProvider),
-        icon: const Icon(Icons.check, size: 14),
-        label: const Text('Collecté', style: TextStyle(fontSize: 11)),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF00c853),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+    return ElevatedButton.icon(
+      onPressed: () => _markCollected(stop, routeProvider, orderProvider),
+      icon: const Icon(Icons.check, size: 16),
+      label: Text(
+        'Collecté',
+        style: GoogleFonts.poppins(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
         ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF00c853),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 0,
       ),
     );
   }
@@ -512,6 +728,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     return _buildSection(
       icon: Icons.route,
       title: 'Optimisation collecte',
+      color: Colors.orange,
       child: Column(
         children: [
           _buildButton(
@@ -519,18 +736,21 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             label: 'Calculer le trajet de collecte',
             onPressed: selectedStops.isEmpty ? null : _optimizeCollectionRoute,
             isPrimary: true,
-            color: Colors.orange,
+            color: Colors.orange.shade600,
           ),
           if (selectedStops.isEmpty && provider.collectionStops.any((s) => !s.isCollected))
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.only(top: 12),
               child: Text(
                 'Sélectionnez au moins un dépôt',
-                style: AppStyles.caption.copyWith(color: Colors.orange.shade200),
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.orange.shade600,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _buildButton(
             icon: Icons.delete_sweep,
             label: 'Effacer la route',
@@ -548,36 +768,107 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   Widget _buildCollectionResultsSection(DeliveryRouteProvider provider) {
     final stops = provider.selectedCollectionStops.where((s) => !s.isCollected).toList();
     return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.orange.shade700, Colors.orange.shade500]),
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: [
+            Colors.orange.shade600,
+            Colors.orange.shade400,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('📦 Route de collecte', style: AppStyles.bodyMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text('📦', style: TextStyle(fontSize: 24)),
+              const SizedBox(width: 10),
+              Text(
+                'Route de collecte',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           _buildResultRow('Distance', provider.formattedCollectionDistance),
           _buildResultRow('Temps estimé', provider.formattedCollectionDuration),
           _buildResultRow('Dépôts', '${stops.length}'),
-          _buildResultRow('Routing', provider.usedOsrmGeometryCollection ? 'OSRM ✓' : (provider.isOsrmAvailable ? 'Fallback' : 'Haversine')),
-          const SizedBox(height: 12),
-          Text('Ordre des dépôts:', style: AppStyles.caption.copyWith(color: Colors.white70)),
-          const SizedBox(height: 8),
-          ...stops.asMap().entries.map((e) => Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+          _buildResultRow(
+            'Routing',
+            provider.usedOsrmGeometryCollection
+                ? 'OSRM ✓'
+                : (provider.isOsrmAvailable ? 'Fallback' : 'Haversine'),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Ordre des dépôts:',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.9),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...stops.asMap().entries.map((e) => Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Row(
               children: [
                 Container(
-                  width: 22, height: 22,
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: Center(child: Text('${e.key + 1}', style: const TextStyle(color: Color(0xFF1a237e), fontWeight: FontWeight.bold, fontSize: 11))),
+                  width: 26,
+                  height: 26,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${e.key + 1}',
+                      style: GoogleFonts.poppins(
+                        color: Colors.orange.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(e.value.depotName, style: AppStyles.caption.copyWith(color: Colors.white), overflow: TextOverflow.ellipsis)),
-                Text('CMD ${e.value.orderIds.map((id) => '#$id').join(', ')}', style: AppStyles.caption.copyWith(color: Colors.white60)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    e.value.depotName,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  'CMD ${e.value.orderIds.map((id) => '#$id').join(', ')}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.white.withOpacity(0.8),
+                  ),
+                ),
               ],
             ),
           )),
@@ -588,78 +879,24 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== DELIVER TAB ==================
 
-  Widget _buildDeliverContent(DeliveryRouteProvider routeProvider) {
+  Widget _buildDeliverContent(DeliveryRouteProvider routeProvider, ScrollController scrollController) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
+      controller: scrollController,
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildLivreurSection(),
-          const SizedBox(height: 12),
           _buildStopsSection(routeProvider),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _buildOptimizationSection(routeProvider),
           if (routeProvider.routePoints.isNotEmpty)
             _buildResultsSection(routeProvider),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
   // ================== SHARED WIDGETS ==================
-
-  Widget _buildLivreurSection() {
-    return Consumer<LivreurProvider>(
-      builder: (context, livreurProvider, _) {
-        final pos = livreurProvider.currentPosition;
-        return _buildSection(
-          icon: Icons.local_shipping,
-          title: 'Livreur (Départ)',
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(child: _buildInfoField('Latitude', pos?.latitude.toStringAsFixed(6) ?? '--')),
-                  const SizedBox(width: 8),
-                  Expanded(child: _buildInfoField('Longitude', pos?.longitude.toStringAsFixed(6) ?? '--')),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildButton(
-                      icon: Icons.my_location,
-                      label: 'Ma position',
-                      onPressed: () async {
-                        final provider = context.read<LivreurProvider>();
-                        final position = await provider.getCurrentPosition();
-                        if (position != null && mounted) {
-                          context.read<DeliveryRouteProvider>().setStartPosition(position);
-                          _mapController.move(position, 14);
-                        }
-                      },
-                      isPrimary: false,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildButton(
-                      icon: Icons.center_focus_strong,
-                      label: 'Centrer',
-                      onPressed: () {
-                        if (pos != null) _mapController.move(pos, 14);
-                      },
-                      isPrimary: false,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildStopsSection(DeliveryRouteProvider provider) {
     final selectedCount = provider.selectedStopIds.length;
@@ -671,29 +908,64 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           if (provider.stops.isNotEmpty) ...[
             Row(
               children: [
-                Text('Sélectionnés: $selectedCount', style: AppStyles.caption.copyWith(color: Colors.white70)),
+                Text(
+                  'Sélectionnés: $selectedCount',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
                 const Spacer(),
-                _miniTextButton(icon: Icons.check_box, label: 'Tout', onPressed: () => provider.selectAllStops()),
-                _miniTextButton(icon: Icons.check_box_outline_blank, label: 'Aucun', onPressed: () => provider.deselectAllStops()),
+                _miniTextButton(
+                  icon: Icons.check_box,
+                  label: 'Tout',
+                  onPressed: () => provider.selectAllStops(),
+                ),
+                _miniTextButton(
+                  icon: Icons.check_box_outline_blank,
+                  label: 'Aucun',
+                  onPressed: () => provider.deselectAllStops(),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
           ],
           if (provider.stops.isEmpty)
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  Icon(Icons.inbox_outlined, size: 40, color: Colors.white.withOpacity(0.3)),
-                  const SizedBox(height: 8),
-                  Text('Aucune livraison', style: AppStyles.bodySmall.copyWith(color: Colors.white70), textAlign: TextAlign.center),
-                  const SizedBox(height: 4),
-                  Text('Collectez d\'abord les articles\ndans l\'onglet "Collecter"', style: AppStyles.caption.copyWith(color: Colors.white38), textAlign: TextAlign.center),
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 48,
+                    color: Colors.grey.shade400,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Aucune livraison',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Collectez d\'abord les articles\ndans l\'onglet "Collecter"',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             )
           else
-            ...provider.stops.asMap().entries.map((entry) => _buildStopItem(entry.key, entry.value, provider)),
+            ...provider.stops.asMap().entries.map(
+              (entry) => _buildStopItem(entry.key, entry.value, provider),
+            ),
         ],
       ),
     );
@@ -704,70 +976,139 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     final isSelected = provider.isStopSelected(stop.id);
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isDelivered 
-            ? const Color(0xFF00c853).withOpacity(0.3)
-            : isSelected
-                ? const Color(0xFF1B998B).withOpacity(0.3)
-                : Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: isSelected && !isDelivered
-            ? Border.all(color: const Color(0xFF1B998B), width: 2)
-            : null,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDelivered
+              ? const Color(0xFF00c853)
+              : isSelected
+                  ? const Color(0xFF1a237e)
+                  : Colors.grey.shade200,
+          width: isSelected || isDelivered ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDelivered
+                ? const Color(0xFF00c853).withOpacity(0.2)
+                : isSelected
+                    ? const Color(0xFF1a237e).withOpacity(0.15)
+                    : Colors.grey.withOpacity(0.08),
+            blurRadius: isSelected || isDelivered ? 8 : 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: InkWell(
-        onTap: () => provider.toggleStopSelection(stop.id),
-        onDoubleTap: () {
-          _mapController.move(stop.position, 15);
-          _showStopDetails(stop);
-        },
-        child: Row(
-          children: [
-            Checkbox(
-              value: isSelected,
-              onChanged: (_) => provider.toggleStopSelection(stop.id),
-              activeColor: const Color(0xFF00c853),
-              checkColor: Colors.white,
-              side: const BorderSide(color: Colors.white54, width: 1.5),
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => provider.toggleStopSelection(stop.id),
+          onDoubleTap: () {
+            _mapController.move(stop.position, 15);
+            _showStopDetails(stop);
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: isSelected,
+                  onChanged: (_) => provider.toggleStopSelection(stop.id),
+                  activeColor: const Color(0xFF1a237e),
+                  checkColor: Colors.white,
+                  side: BorderSide(
+                    color: isSelected ? const Color(0xFF1a237e) : Colors.grey.shade400,
+                    width: 2,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    gradient: isDelivered
+                        ? const LinearGradient(
+                            colors: [Color(0xFF00c853), Color(0xFF00e676)],
+                          )
+                        : isSelected
+                            ? const LinearGradient(
+                                colors: [Color(0xFF1a237e), Color(0xFF3949AB)],
+                              )
+                            : null,
+                    color: !isDelivered && !isSelected ? Colors.grey.shade300 : null,
+                    shape: BoxShape.circle,
+                    boxShadow: isDelivered || isSelected
+                        ? [
+                            BoxShadow(
+                              color: (isDelivered
+                                      ? const Color(0xFF00c853)
+                                      : const Color(0xFF1a237e))
+                                  .withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: isDelivered
+                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        : Text(
+                            '${index + 1}',
+                            style: GoogleFonts.poppins(
+                              color: isSelected ? Colors.white : Colors.grey.shade700,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        stop.name,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1a237e),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'CMD #${stop.order.id}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected && !isDelivered)
+                  IconButton(
+                    icon: Icon(
+                      Icons.check_circle,
+                      color: const Color(0xFF00c853),
+                      size: 28,
+                    ),
+                    onPressed: () => _markDelivered(stop),
+                    tooltip: 'Marquer livré',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  ),
+              ],
             ),
-            Container(
-              width: 28, height: 28,
-              decoration: BoxDecoration(
-                color: isDelivered ? const Color(0xFF00c853) : isSelected ? const Color(0xFF1B998B) : Colors.white54,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: isDelivered
-                    ? const Icon(Icons.check, color: Colors.white, size: 16)
-                    : Text('${index + 1}', style: TextStyle(
-                        color: isSelected || isDelivered ? Colors.white : const Color(0xFF1a237e),
-                        fontWeight: FontWeight.bold, fontSize: 12,
-                      )),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(stop.name, style: AppStyles.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text('CMD #${stop.order.id}', style: AppStyles.caption.copyWith(color: Colors.white60)),
-                ],
-              ),
-            ),
-            if (isSelected && !isDelivered)
-              IconButton(
-                icon: const Icon(Icons.check_circle_outline, color: Colors.white70, size: 20),
-                onPressed: () => _markDelivered(stop),
-                tooltip: 'Marquer livré',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -787,10 +1128,17 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           ),
           if (provider.selectedStops.isEmpty && provider.stops.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text('Sélectionnez au moins un client', style: AppStyles.caption.copyWith(color: Colors.orange), textAlign: TextAlign.center),
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                'Sélectionnez au moins un client',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.orange.shade600,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _buildButton(
             icon: Icons.delete_sweep,
             label: 'Effacer la route',
@@ -805,37 +1153,121 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   Widget _buildResultsSection(DeliveryRouteProvider provider) {
     return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF00c853), Color(0xFF00e676)]),
-        borderRadius: BorderRadius.circular(12),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1a237e), Color(0xFF3949AB)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1a237e).withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('📊 Route de livraison', style: AppStyles.bodyMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text('📦', style: TextStyle(fontSize: 24)),
+              const SizedBox(width: 10),
+              Text(
+                'Route de livraison',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           _buildResultRow('Distance', provider.formattedDistance),
           _buildResultRow('Temps estimé', provider.formattedDuration),
           _buildResultRow('Arrêts', '${provider.stops.length}'),
-          _buildResultRow('Livrées', '${provider.stops.where((s) => s.isDelivered).length}'),
-          _buildResultRow('Routing', provider.usedOsrmGeometry ? 'OSRM ✓' : (provider.isOsrmAvailable ? 'Fallback' : 'Haversine')),
-          const SizedBox(height: 12),
-          Text('Ordre des stops:', style: AppStyles.caption.copyWith(color: Colors.white70)),
-          const SizedBox(height: 8),
-          ...provider.stops.asMap().entries.map((e) => Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+          _buildResultRow(
+            'Livrées',
+            '${provider.stops.where((s) => s.isDelivered).length}',
+          ),
+          _buildResultRow(
+            'Routing',
+            provider.usedOsrmGeometry
+                ? 'OSRM ✓'
+                : (provider.isOsrmAvailable ? 'Fallback' : 'Haversine'),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Ordre des stops:',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.9),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...provider.stops.asMap().entries.map((e) => Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Row(
               children: [
                 Container(
-                  width: 22, height: 22,
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: Center(child: Text('${e.key + 1}', style: const TextStyle(color: Color(0xFF1a237e), fontWeight: FontWeight.bold, fontSize: 11))),
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: e.value.isDelivered
+                        ? const Color(0xFF00c853)
+                        : Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: e.value.isDelivered
+                        ? const Icon(Icons.check, color: Colors.white, size: 14)
+                        : Text(
+                            '${e.key + 1}',
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF1a237e),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(e.value.name, style: AppStyles.caption.copyWith(color: Colors.white), overflow: TextOverflow.ellipsis)),
-                if (e.value.isDelivered) const Icon(Icons.check, color: Colors.white, size: 16),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    e.value.name,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (e.value.isDelivered)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00c853),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Livré',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
               ],
             ),
           )),
@@ -1040,59 +1472,94 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   // ================== TOP CONTROLS ==================
 
   Widget _buildTopControls() {
+    return const SizedBox.shrink();
+  }
+
+  // ================== FLOATING CONTROLS ==================
+
+  Widget _buildFloatingControls() {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
+        padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8)],
-              ),
-              child: IconButton(
-                icon: Icon(_showSidebar ? Icons.menu_open : Icons.menu),
-                onPressed: () => setState(() => _showSidebar = !_showSidebar),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8)],
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
             const Spacer(),
-            Column(
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                _buildMapButton(Icons.center_focus_strong, 'Centrer', () {
-                  final pos = context.read<LivreurProvider>().currentPosition;
-                  if (pos != null) _mapController.move(pos, 14);
-                }),
-                const SizedBox(height: 8),
-                _buildMapButton(Icons.zoom_out_map, 'Tout voir', _fitAllMarkers),
+                // Contrôles de zoom
+                Column(
+                  children: [
+                    _buildFloatingButton(
+                      icon: Icons.add,
+                      tooltip: 'Zoom +',
+                      onPressed: () {
+                        final zoom = _mapController.camera.zoom;
+                        _mapController.move(_mapController.camera.center, zoom + 1);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _buildFloatingButton(
+                      icon: Icons.remove,
+                      tooltip: 'Zoom -',
+                      onPressed: () {
+                        final zoom = _mapController.camera.zoom;
+                        _mapController.move(_mapController.camera.center, zoom - 1);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _buildFloatingButton(
+                      icon: Icons.zoom_out_map,
+                      tooltip: 'Tout voir',
+                      onPressed: _fitAllMarkers,
+                      backgroundColor: const Color(0xFF1a237e),
+                      iconColor: Colors.white,
+                    ),
+                  ],
+                ),
               ],
             ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMapButton(IconData icon, String tooltip, VoidCallback onPressed) {
+  Widget _buildFloatingButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    Color? backgroundColor,
+    Color? iconColor,
+  }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8)],
+        color: backgroundColor ?? Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: IconButton(icon: Icon(icon, color: const Color(0xFF1a237e)), onPressed: onPressed, tooltip: tooltip),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Icon(
+              icon,
+              color: iconColor ?? const Color(0xFF1a237e),
+              size: 24,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1147,27 +1614,45 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   Widget _buildSection({required IconData icon, required String title, required Widget child, Color? color}) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: color ?? Colors.white, size: 18),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (color ?? const Color(0xFF1a237e)).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color ?? const Color(0xFF1a237e), size: 20),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
-                  style: AppStyles.bodyMedium.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF1a237e),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           child,
         ],
       ),
@@ -1203,23 +1688,30 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     } else if (isPrimary && color != null) {
       bgColor = color;
     } else if (isPrimary) {
-      bgColor = const Color(0xFF00c853);
+      bgColor = const Color(0xFF1a237e);
     } else {
-      bgColor = Colors.white.withOpacity(0.2);
+      bgColor = Colors.grey.shade200;
     }
     
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: onPressed,
-        icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontSize: 13)),
+        icon: Icon(icon, size: 20),
+        label: Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: bgColor,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          foregroundColor: isPrimary || isDanger ? Colors.white : Colors.grey.shade700,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 0,
+          shadowColor: Colors.transparent,
         ),
       ),
     );
@@ -1227,12 +1719,25 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   Widget _buildResultRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: AppStyles.bodySmall.copyWith(color: Colors.white70)),
-          Text(value, style: AppStyles.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: Colors.white.withOpacity(0.9),
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -1241,8 +1746,15 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   Widget _miniTextButton({required IconData icon, required String label, required VoidCallback onPressed}) {
     return TextButton.icon(
       onPressed: onPressed,
-      icon: Icon(icon, color: Colors.white70, size: 16),
-      label: Text(label, style: AppStyles.caption.copyWith(color: Colors.white70)),
+      icon: Icon(icon, color: const Color(0xFF1a237e), size: 16),
+      label: Text(
+        label,
+        style: GoogleFonts.poppins(
+          fontSize: 12,
+          color: const Color(0xFF1a237e),
+          fontWeight: FontWeight.w500,
+        ),
+      ),
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         minimumSize: Size.zero,
@@ -1484,6 +1996,27 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           }
         }
       }
+    }
+  }
+
+  void _toggleBottomSheet() {
+    setState(() {
+      _isSheetExpanded = !_isSheetExpanded;
+    });
+    
+    // Animer le bottom sheet vers la position désirée
+    if (_isSheetExpanded) {
+      _sheetController.animateTo(
+        0.4,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      _sheetController.animateTo(
+        0.12,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
