@@ -25,9 +25,9 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   double _optimizationProgress = 0;
   String _optimizationStatus = '';
   late TabController _tabController;
-  final DraggableScrollableController _sheetController = DraggableScrollableController();
-  double _sheetPosition = 0.4;
+  Key _sheetKey = UniqueKey();
   bool _isSheetExpanded = true; // Contrôle l'état du bottom sheet
+  bool _isTogglingSheet = false; // Guard pour ignorer les notifications pendant le toggle
   
   // Default center: Sfax, Tunisia
   static const LatLng _defaultCenter = LatLng(34.74, 10.76);
@@ -45,15 +45,6 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
       }
     });
     
-    // Écouter les changements de position du sheet pour synchroniser l'état
-    _sheetController.addListener(() {
-      if (_sheetController.size > 0.25 && !_isSheetExpanded) {
-        setState(() => _isSheetExpanded = true);
-      } else if (_sheetController.size <= 0.25 && _isSheetExpanded) {
-        setState(() => _isSheetExpanded = false);
-      }
-    });
-    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initializeMap();
@@ -64,7 +55,6 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   @override
   void dispose() {
     _tabController.dispose();
-    _sheetController.dispose();
     super.dispose();
   }
 
@@ -263,48 +253,74 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   // ================== BOTTOM SHEET ==================
 
   Widget _buildBottomSheet() {
-    return Consumer2<DeliveryRouteProvider, OrderProvider>(
-      builder: (context, routeProvider, orderProvider, _) {
-        return DraggableScrollableSheet(
-          controller: _sheetController,
-          initialChildSize: _isSheetExpanded ? 0.4 : 0.12,
-          minChildSize: 0.12,
-          maxChildSize: 0.85,
-          snap: true,
-          snapSizes: const [0.12, 0.4, 0.85],
-          builder: (context, scrollController) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildSheetHandle(),
-                  _buildModeTabs(),
-                  Expanded(
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildCollectContent(routeProvider, orderProvider, scrollController),
-                        _buildDeliverContent(routeProvider, scrollController),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
+    // On utilise NotificationListener pour tracker le drag manuel
+    // et un Key unique pour forcer la recréation du sheet lors du toggle.
+    return NotificationListener<DraggableScrollableNotification>(
+      onNotification: (notification) {
+        if (_isTogglingSheet) return false;
+        final isExpanded = notification.extent > 0.25;
+        if (isExpanded != _isSheetExpanded) {
+          setState(() => _isSheetExpanded = isExpanded);
+        }
+        return false;
       },
+      child: DraggableScrollableSheet(
+        key: _sheetKey,
+        initialChildSize: _isSheetExpanded ? 0.4 : 0.12,
+        minChildSize: 0.12,
+        maxChildSize: 0.85,
+        snap: true,
+        snapSizes: const [0.12, 0.4, 0.85],
+        builder: (context, scrollController) {
+          return Consumer2<DeliveryRouteProvider, OrderProvider>(
+            builder: (context, routeProvider, orderProvider, _) {
+              return Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    _buildSheetHandle(),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Only show tabs + content when there's enough vertical space
+                          if (constraints.maxHeight < 60) {
+                            return const SizedBox.shrink();
+                          }
+                          return Column(
+                            children: [
+                              _buildModeTabs(),
+                              Expanded(
+                                child: TabBarView(
+                                  controller: _tabController,
+                                  children: [
+                                    _buildCollectContent(routeProvider, orderProvider, scrollController),
+                                    _buildDeliverContent(routeProvider, scrollController),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -2000,24 +2016,15 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   }
 
   void _toggleBottomSheet() {
+    _isTogglingSheet = true;
     setState(() {
       _isSheetExpanded = !_isSheetExpanded;
+      _sheetKey = UniqueKey(); // Force la recréation du sheet avec le nouveau initialChildSize
     });
-    
-    // Animer le bottom sheet vers la position désirée
-    if (_isSheetExpanded) {
-      _sheetController.animateTo(
-        0.4,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _sheetController.animateTo(
-        0.12,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
+    // Réactiver les notifications après le rebuild
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _isTogglingSheet = false;
+    });
   }
 
   void _fitAllMarkers() {
