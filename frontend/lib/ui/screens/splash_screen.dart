@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_styles.dart';
+import '../../core/constants/responsive.dart';
 import '../../providers/providers.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -80,6 +81,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final r = Responsive(context);
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -100,27 +102,27 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               ScaleTransition(
                 scale: _scaleAnimation,
                 child: Container(
-                  width: 120,
-                  height: 120,
+                  width: r.avatarSize(120),
+                  height: r.avatarSize(120),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.2),
-                        blurRadius: 20,
-                        spreadRadius: 5,
+                        blurRadius: r.scale(20),
+                        spreadRadius: r.scale(5),
                       ),
                     ],
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.local_shipping_rounded,
-                    size: 60,
+                    size: r.iconSize(60),
                     color: AppColors.primary,
                   ),
                 ),
               ),
-              const SizedBox(height: 32),
+              r.verticalSpace(32),
               
               // App name
               FadeTransition(
@@ -129,33 +131,33 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   children: [
                     Text(
                       'Smart Delivery',
-                      style: AppStyles.headingLarge.copyWith(
+                      style: AppStyles.headingLargeR(r).copyWith(
                         color: Colors.white,
-                        fontSize: 32,
+                        fontSize: r.fontSize(32),
                         letterSpacing: 2,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    r.verticalSpace(8),
                     Text(
                       'Optimisation de livraison OSRM',
-                      style: AppStyles.bodyMedium.copyWith(
+                      style: AppStyles.bodyMediumR(r).copyWith(
                         color: Colors.white70,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 48),
+              r.verticalSpace(48),
               
               // Loading indicator
               FadeTransition(
                 opacity: _fadeAnimation,
-                child: const SizedBox(
-                  width: 30,
-                  height: 30,
+                child: SizedBox(
+                  width: r.scale(30),
+                  height: r.scale(30),
                   child: CircularProgressIndicator(
                     color: Colors.white,
-                    strokeWidth: 3,
+                    strokeWidth: r.scale(3),
                   ),
                 ),
               ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
+import '../../../core/constants/responsive.dart';
 import '../../../data/models/models.dart';
 import '../../../providers/providers.dart';
 
@@ -23,11 +24,12 @@ class _SocieteListScreenState extends State<SocieteListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final r = Responsive(context);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
-        title: Text('Sociétés', style: AppStyles.headingMedium.copyWith(color: Colors.white)),
+        title: Text('Sociétés', style: AppStyles.headingMediumR(r).copyWith(color: Colors.white)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -44,10 +46,10 @@ class _SocieteListScreenState extends State<SocieteListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                  const SizedBox(height: 16),
-                  Text(provider.errorMessage!, style: AppStyles.bodyMedium),
-                  const SizedBox(height: 16),
+                  Icon(Icons.error_outline, size: r.iconSize(48), color: AppColors.error),
+                  r.verticalSpace(16),
+                  Text(provider.errorMessage!, style: AppStyles.bodyMediumR(r)),
+                  r.verticalSpace(16),
                   ElevatedButton(
                     onPressed: () => provider.loadSocietes(),
                     child: const Text('Réessayer'),
@@ -62,11 +64,11 @@ class _SocieteListScreenState extends State<SocieteListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.business_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
-                  const SizedBox(height: 16),
-                  Text('Aucune société', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
-                  const SizedBox(height: 8),
-                  Text('Ajoutez votre première société', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                  Icon(Icons.business_outlined, size: r.iconSize(64), color: AppColors.textSecondary.withOpacity(0.5)),
+                  r.verticalSpace(16),
+                  Text('Aucune société', style: AppStyles.bodyLargeR(r).copyWith(color: AppColors.textSecondary)),
+                  r.verticalSpace(8),
+                  Text('Ajoutez votre première société', style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
                 ],
               ),
             );
@@ -74,13 +76,18 @@ class _SocieteListScreenState extends State<SocieteListScreen> {
 
           return RefreshIndicator(
             onRefresh: () => provider.loadSocietes(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: provider.societes.length,
-              itemBuilder: (context, index) {
-                final societe = provider.societes[index];
-                return _buildSocieteCard(societe, provider);
-              },
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: r.maxContentWidth),
+                child: ListView.builder(
+                  padding: r.paddingAll(16),
+                  itemCount: provider.societes.length,
+                  itemBuilder: (context, index) {
+                    final societe = provider.societes[index];
+                    return _buildSocieteCard(societe, provider, r);
+                  },
+                ),
+              ),
             ),
           );
         },
@@ -93,38 +100,38 @@ class _SocieteListScreenState extends State<SocieteListScreen> {
     );
   }
 
-  Widget _buildSocieteCard(Societe societe, SocieteProvider provider) {
+  Widget _buildSocieteCard(Societe societe, SocieteProvider provider, Responsive r) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: EdgeInsets.only(bottom: r.space(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(12))),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
+        contentPadding: r.paddingAll(16),
         leading: Container(
-          width: 50,
-          height: 50,
+          width: r.scale(50),
+          height: r.scale(50),
           decoration: BoxDecoration(
             color: AppColors.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(r.radius(12)),
           ),
-          child: const Icon(Icons.business, color: AppColors.primary),
+          child: Icon(Icons.business, color: AppColors.primary, size: r.iconSize(24)),
         ),
         title: Text(
           societe.raisonSociale,
-          style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+          style: AppStyles.bodyLargeR(r).copyWith(fontWeight: FontWeight.w600),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (societe.adresse != null) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: r.space(4)),
               Row(
                 children: [
-                  const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.location_on_outlined, size: r.iconSize(14), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Expanded(
                     child: Text(
                       societe.adresse!,
-                      style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                      style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -132,14 +139,14 @@ class _SocieteListScreenState extends State<SocieteListScreen> {
               ),
             ],
             if (societe.telephone != null) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: r.space(4)),
               Row(
                 children: [
-                  const Icon(Icons.phone_outlined, size: 14, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.phone_outlined, size: r.iconSize(14), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Text(
                     societe.telephone!,
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),

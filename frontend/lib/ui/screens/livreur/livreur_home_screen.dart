@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
+import '../../../core/constants/responsive.dart';
 import '../../../data/models/models.dart';
 import '../../../providers/providers.dart';
 
@@ -150,6 +151,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
+    final r = Responsive(context);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -159,11 +161,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
         actionsIconTheme: const IconThemeData(color: Colors.white),
         title: Row(
           children: [
-            const Icon(Icons.delivery_dining, color: Colors.white),
-            const SizedBox(width: 12),
+            Icon(Icons.delivery_dining, color: Colors.white, size: r.iconSize(24)),
+            SizedBox(width: r.space(12)),
             Text(
               'Mes Livraisons',
-              style: AppStyles.headingMedium.copyWith(color: Colors.white),
+              style: AppStyles.headingMediumR(r).copyWith(color: Colors.white),
             ),
           ],
         ),
@@ -174,7 +176,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
               return Stack(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                    icon: Icon(Icons.notifications_outlined, color: Colors.white, size: r.iconSize(24)),
                     onPressed: _openNotifications,
                     tooltip: 'Notifications',
                   ),
@@ -183,14 +185,14 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                       right: 6,
                       top: 6,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: EdgeInsets.all(r.space(4)),
                         decoration: const BoxDecoration(
                           color: Colors.red,
                           shape: BoxShape.circle,
                         ),
                         child: Text(
                           '${notifProvider.unreadCount}',
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: Colors.white, fontSize: r.fontSize(10), fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -205,6 +207,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                 icon: Icon(
                   provider.isTrackingPosition ? Icons.gps_fixed : Icons.gps_off,
                   color: provider.isTrackingPosition ? Colors.greenAccent : Colors.white60,
+                  size: r.iconSize(24),
                 ),
                 onPressed: () async {
                   if (!provider.isTrackingPosition) {
@@ -216,7 +219,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.account_circle_outlined, color: Colors.white),
+            icon: Icon(Icons.account_circle_outlined, color: Colors.white, size: r.iconSize(24)),
             onSelected: (value) {
               if (value == 'logout') {
                 _handleLogout();
@@ -227,9 +230,9 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                 value: 'profile',
                 child: Row(
                   children: [
-                    const Icon(Icons.person_outline, color: AppColors.textSecondary),
-                    const SizedBox(width: 12),
-                    Text('Mon profil', style: AppStyles.bodyMedium),
+                    Icon(Icons.person_outline, color: AppColors.textSecondary, size: r.iconSize(20)),
+                    SizedBox(width: r.space(12)),
+                    Text('Mon profil', style: AppStyles.bodyMediumR(r)),
                   ],
                 ),
               ),
@@ -238,9 +241,9 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                 value: 'logout',
                 child: Row(
                   children: [
-                    const Icon(Icons.logout, color: AppColors.error),
-                    const SizedBox(width: 12),
-                    Text('Déconnexion', style: AppStyles.bodyMedium.copyWith(color: AppColors.error)),
+                    Icon(Icons.logout, color: AppColors.error, size: r.iconSize(20)),
+                    SizedBox(width: r.space(12)),
+                    Text('Déconnexion', style: AppStyles.bodyMediumR(r).copyWith(color: AppColors.error)),
                   ],
                 ),
               ),
@@ -253,8 +256,8 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
           indicatorWeight: 3.0,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
-          labelStyle: AppStyles.bodyMedium.copyWith(color: Colors.white),
-          unselectedLabelStyle: AppStyles.bodyMedium.copyWith(color: Colors.white70),
+          labelStyle: AppStyles.bodyMediumR(r).copyWith(color: Colors.white),
+          unselectedLabelStyle: AppStyles.bodyMediumR(r).copyWith(color: Colors.white70),
           tabs: [
             const Tab(text: 'À collecter', icon: Icon(Icons.inventory_2)),
             const Tab(text: 'À livrer', icon: Icon(Icons.local_shipping)),
@@ -278,10 +281,10 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildCollectTab(),
-          _buildDeliverTab(),
-          _buildProposedOrdersTab(),
-          _buildPendingOrdersTab(),
+          _buildCollectTab(r),
+          _buildDeliverTab(r),
+          _buildProposedOrdersTab(r),
+          _buildPendingOrdersTab(r),
         ],
       ),
       bottomNavigationBar: _buildBottomNav(),
@@ -293,10 +296,10 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
           return FloatingActionButton.extended(
             onPressed: () => _startDeliveryRoute(activeOrders),
             backgroundColor: AppColors.accent,
-            icon: const Icon(Icons.navigation, color: Colors.white),
+            icon: Icon(Icons.navigation, color: Colors.white, size: r.iconSize(24)),
             label: Text(
               'Démarrer (${activeOrders.length})',
-              style: AppStyles.bodyMedium.copyWith(color: Colors.white),
+              style: AppStyles.bodyMediumR(r).copyWith(color: Colors.white),
             ),
           );
         },
@@ -304,7 +307,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
-  Widget _buildCollectTab() {
+  Widget _buildCollectTab(Responsive r) {
     return Consumer<OrderProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading) {
@@ -318,11 +321,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.check_circle_outline, size: 64, color: AppColors.success.withOpacity(0.5)),
-                const SizedBox(height: 16),
-                Text('Rien à collecter', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
-                const SizedBox(height: 8),
-                Text('Tous les articles ont été collectés', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                Icon(Icons.check_circle_outline, size: r.iconSize(64), color: AppColors.success.withOpacity(0.5)),
+                r.verticalSpace(16),
+                Text('Rien à collecter', style: AppStyles.bodyLargeR(r).copyWith(color: AppColors.textSecondary)),
+                r.verticalSpace(8),
+                Text('Tous les articles ont été collectés', style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
               ],
             ),
           );
@@ -336,11 +339,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             }
           },
           child: ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(r.space(16)),
             itemCount: toCollect.length,
             itemBuilder: (context, index) {
               final order = toCollect[index];
-              return _buildCollectionCard(order, provider);
+              return _buildCollectionCard(order, provider, r);
             },
           ),
         );
@@ -348,13 +351,13 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
-  Widget _buildCollectionCard(Order order, OrderProvider provider) {
+  Widget _buildCollectionCard(Order order, OrderProvider provider, Responsive r) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: EdgeInsets.only(bottom: r.space(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(16))),
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(r.space(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -364,32 +367,32 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                 Row(
                   children: [
                     Container(
-                      width: 50,
-                      height: 50,
+                      width: r.scale(50),
+                      height: r.scale(50),
                       decoration: BoxDecoration(
                         color: Colors.orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(r.radius(12)),
                       ),
-                      child: const Icon(Icons.inventory_2, color: Colors.orange),
+                      child: Icon(Icons.inventory_2, color: Colors.orange, size: r.iconSize(24)),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: r.space(12)),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Commande #${order.id}',
-                          style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                          style: AppStyles.bodyLargeR(r).copyWith(fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: r.space(4)),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: EdgeInsets.symmetric(horizontal: r.space(8), vertical: r.space(2)),
                           decoration: BoxDecoration(
                             color: Colors.orange.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(r.radius(12)),
                           ),
                           child: Text(
                             'À collecter',
-                            style: AppStyles.caption.copyWith(color: Colors.orange, fontWeight: FontWeight.w600),
+                            style: AppStyles.captionR(r).copyWith(color: Colors.orange, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],
@@ -399,51 +402,51 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                 if (order.montantTTC != null)
                   Text(
                     '${order.montantTTC!.toStringAsFixed(2)} TND',
-                    style: AppStyles.bodyLarge.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold),
+                    style: AppStyles.bodyLargeR(r).copyWith(color: AppColors.primary, fontWeight: FontWeight.bold),
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            r.verticalSpace(12),
             // Show items
             if (order.items != null && order.items!.isNotEmpty) ...[
               ...order.items!.take(3).map((item) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
+                padding: EdgeInsets.only(bottom: r.space(4)),
                 child: Row(
                   children: [
-                    const Icon(Icons.circle, size: 6, color: AppColors.textSecondary),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('${item.displayName} x${item.quantite}', style: AppStyles.bodySmall)),
+                    Icon(Icons.circle, size: r.fontSize(6), color: AppColors.textSecondary),
+                    SizedBox(width: r.space(8)),
+                    Expanded(child: Text('${item.displayName} x${item.quantite}', style: AppStyles.bodySmallR(r))),
                   ],
                 ),
               )),
               if (order.items!.length > 3)
-                Text('... et ${order.items!.length - 3} autre(s)', style: AppStyles.caption.copyWith(color: AppColors.textSecondary)),
+                Text('... et ${order.items!.length - 3} autre(s)', style: AppStyles.captionR(r).copyWith(color: AppColors.textSecondary)),
             ],
-            const SizedBox(height: 12),
+            r.verticalSpace(12),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _showCollectionPlan(order, provider),
-                    icon: const Icon(Icons.route, size: 18),
-                    label: const Text('Plan de collecte'),
+                    icon: Icon(Icons.route, size: r.iconSize(18)),
+                    label: Text('Plan de collecte', style: TextStyle(fontSize: r.fontSize(13))),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.primary,
                       side: const BorderSide(color: AppColors.primary),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: r.space(8)),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _markOrderCollected(order, provider),
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Collecté'),
+                    icon: Icon(Icons.check, size: r.iconSize(18)),
+                    label: Text('Collecté', style: TextStyle(fontSize: r.fontSize(13))),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.success,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
                     ),
                   ),
                 ),
@@ -455,7 +458,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
-  Widget _buildDeliverTab() {
+  Widget _buildDeliverTab(Responsive r) {
     return Consumer<OrderProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading) {
@@ -469,11 +472,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.inbox_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
-                const SizedBox(height: 16),
-                Text('Rien à livrer', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
-                const SizedBox(height: 8),
-                Text('Collectez d\'abord les articles des dépôts', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                Icon(Icons.inbox_outlined, size: r.iconSize(64), color: AppColors.textSecondary.withOpacity(0.5)),
+                r.verticalSpace(16),
+                Text('Rien à livrer', style: AppStyles.bodyLargeR(r).copyWith(color: AppColors.textSecondary)),
+                r.verticalSpace(8),
+                Text('Collectez d\'abord les articles des dépôts', style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
               ],
             ),
           );
@@ -487,11 +490,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             }
           },
           child: ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(r.space(16)),
             itemCount: toDeliver.length,
             itemBuilder: (context, index) {
               final order = toDeliver[index];
-              return _buildOrderCard(order, provider, isMine: true);
+              return _buildOrderCard(order, provider, isMine: true, r: r);
             },
           ),
         );
@@ -499,7 +502,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
-  Widget _buildProposedOrdersTab() {
+  Widget _buildProposedOrdersTab(Responsive r) {
     return Consumer<OrderProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading) {
@@ -511,13 +514,13 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.inbox_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
-                const SizedBox(height: 16),
+                Icon(Icons.inbox_outlined, size: r.iconSize(64), color: AppColors.textSecondary.withOpacity(0.5)),
+                r.verticalSpace(16),
                 Text('Aucune commande proposée',
-                    style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
-                const SizedBox(height: 8),
+                    style: AppStyles.bodyLargeR(r).copyWith(color: AppColors.textSecondary)),
+                r.verticalSpace(8),
                 Text('Les commandes assignées par l\'admin apparaîtront ici',
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
               ],
             ),
           );
@@ -528,11 +531,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             await provider.loadProposedOrders();
           },
           child: ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(r.space(16)),
             itemCount: provider.proposedOrders.length,
             itemBuilder: (context, index) {
               final order = provider.proposedOrders[index];
-              return _buildProposedOrderCard(order, provider);
+              return _buildProposedOrderCard(order, provider, r);
             },
           ),
         );
@@ -540,18 +543,18 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
-  Widget _buildProposedOrderCard(Order order, OrderProvider provider) {
+  Widget _buildProposedOrderCard(Order order, OrderProvider provider, Responsive r) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: EdgeInsets.only(bottom: r.space(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(16))),
       elevation: 3,
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(r.radius(16)),
           border: Border.all(color: Colors.amber.withOpacity(0.5), width: 1.5),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(r.space(16)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -562,32 +565,32 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                   Row(
                     children: [
                       Container(
-                        width: 50,
-                        height: 50,
+                        width: r.scale(50),
+                        height: r.scale(50),
                         decoration: BoxDecoration(
                           color: Colors.amber.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(r.radius(12)),
                         ),
-                        child: const Icon(Icons.assignment_ind, color: Colors.amber),
+                        child: Icon(Icons.assignment_ind, color: Colors.amber, size: r.iconSize(24)),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: r.space(12)),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Commande #${order.id}',
-                            style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                            style: AppStyles.bodyLargeR(r).copyWith(fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 4),
+                          SizedBox(height: r.space(4)),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: EdgeInsets.symmetric(horizontal: r.space(8), vertical: r.space(2)),
                             decoration: BoxDecoration(
                               color: Colors.amber.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(r.radius(12)),
                             ),
                             child: Text(
                               'En attente de votre réponse',
-                              style: AppStyles.caption.copyWith(color: Colors.amber[800], fontWeight: FontWeight.w600),
+                              style: AppStyles.captionR(r).copyWith(color: Colors.amber[800], fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],
@@ -600,37 +603,37 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                       children: [
                         Text(
                           '${order.montantTTC!.toStringAsFixed(2)}',
-                          style: AppStyles.headingSmall.copyWith(color: AppColors.primary),
+                          style: AppStyles.headingSmallR(r).copyWith(color: AppColors.primary),
                         ),
-                        Text('TND', style: AppStyles.caption.copyWith(color: AppColors.textSecondary)),
+                        Text('TND', style: AppStyles.captionR(r).copyWith(color: AppColors.textSecondary)),
                       ],
                     ),
                 ],
               ),
-              const SizedBox(height: 12),
+              r.verticalSpace(12),
               // Client & date info
               Row(
                 children: [
-                  const Icon(Icons.person_outline, size: 16, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.person_outline, size: r.iconSize(16), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Text(order.clientNom ?? 'Client #${order.clientId ?? "N/A"}',
-                      style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
-                  const SizedBox(width: 16),
-                  const Icon(Icons.access_time, size: 16, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                      style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
+                  SizedBox(width: r.space(16)),
+                  Icon(Icons.access_time, size: r.iconSize(16), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Text(order.dateCommande?.toString().substring(0, 10) ?? '',
-                      style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                      style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
                 ],
               ),
               if (order.adresseLivraison != null) ...[
-                const SizedBox(height: 8),
+                r.verticalSpace(8),
                 Row(
                   children: [
-                    const Icon(Icons.location_on_outlined, size: 16, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
+                    Icon(Icons.location_on_outlined, size: r.iconSize(16), color: AppColors.textSecondary),
+                    SizedBox(width: r.space(4)),
                     Expanded(
                       child: Text(order.adresseLivraison!,
-                          style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                          style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                     ),
                   ],
@@ -638,39 +641,39 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
               ],
               // Items summary
               if (order.items != null && order.items!.isNotEmpty) ...[
-                const SizedBox(height: 8),
+                r.verticalSpace(8),
                 Text('${order.items!.length} article(s)',
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
               ],
-              const SizedBox(height: 16),
+              r.verticalSpace(16),
               // Accept / Reject buttons
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _rejectOrder(order, provider),
-                      icon: const Icon(Icons.close, size: 18),
-                      label: const Text('Refuser'),
+                      icon: Icon(Icons.close, size: r.iconSize(18)),
+                      label: Text('Refuser', style: TextStyle(fontSize: r.fontSize(13))),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.error,
                         side: const BorderSide(color: AppColors.error),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
+                        padding: EdgeInsets.symmetric(vertical: r.space(12)),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: r.space(12)),
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
                       onPressed: () => _acceptOrder(order, provider),
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text('Accepter'),
+                      icon: Icon(Icons.check, size: r.iconSize(18)),
+                      label: Text('Accepter', style: TextStyle(fontSize: r.fontSize(13))),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.success,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
+                        padding: EdgeInsets.symmetric(vertical: r.space(12)),
                       ),
                     ),
                   ),
@@ -683,7 +686,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
-  Widget _buildPendingOrdersTab() {
+  Widget _buildPendingOrdersTab(Responsive r) {
     return Consumer<OrderProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading) {
@@ -695,9 +698,9 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.check_circle_outline, size: 64, color: AppColors.success.withOpacity(0.5)),
-                const SizedBox(height: 16),
-                Text('Toutes les commandes sont assignées', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
+                Icon(Icons.check_circle_outline, size: r.iconSize(64), color: AppColors.success.withOpacity(0.5)),
+                r.verticalSpace(16),
+                Text('Toutes les commandes sont assignées', style: AppStyles.bodyLargeR(r).copyWith(color: AppColors.textSecondary)),
               ],
             ),
           );
@@ -711,11 +714,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
             }
           },
           child: ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(r.space(16)),
             itemCount: provider.pendingOrders.length,
             itemBuilder: (context, index) {
               final order = provider.pendingOrders[index];
-              return _buildOrderCard(order, provider, isMine: false);
+              return _buildOrderCard(order, provider, isMine: false, r: r);
             },
           ),
         );
@@ -723,7 +726,7 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     );
   }
 
-  Widget _buildOrderCard(Order order, OrderProvider provider, {required bool isMine}) {
+  Widget _buildOrderCard(Order order, OrderProvider provider, {required bool isMine, required Responsive r}) {
     Color statusColor;
     String statusText;
     
@@ -758,11 +761,11 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
     }
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: EdgeInsets.only(bottom: r.space(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(16))),
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(r.space(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -772,32 +775,32 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                 Row(
                   children: [
                     Container(
-                      width: 50,
-                      height: 50,
+                      width: r.scale(50),
+                      height: r.scale(50),
                       decoration: BoxDecoration(
                         color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(r.radius(12)),
                       ),
-                      child: Icon(Icons.shopping_bag, color: statusColor),
+                      child: Icon(Icons.shopping_bag, color: statusColor, size: r.iconSize(24)),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: r.space(12)),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Commande #${order.id}',
-                          style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                          style: AppStyles.bodyLargeR(r).copyWith(fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: r.space(4)),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: EdgeInsets.symmetric(horizontal: r.space(8), vertical: r.space(2)),
                           decoration: BoxDecoration(
                             color: statusColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(r.radius(12)),
                           ),
                           child: Text(
                             statusText,
-                            style: AppStyles.caption.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+                            style: AppStyles.captionR(r).copyWith(color: statusColor, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],
@@ -810,38 +813,38 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                     children: [
                       Text(
                         '${order.montantTTC!.toStringAsFixed(2)}',
-                        style: AppStyles.headingSmall.copyWith(color: AppColors.primary),
+                        style: AppStyles.headingSmallR(r).copyWith(color: AppColors.primary),
                       ),
-                      Text('TND', style: AppStyles.caption.copyWith(color: AppColors.textSecondary)),
+                      Text('TND', style: AppStyles.captionR(r).copyWith(color: AppColors.textSecondary)),
                     ],
                   ),
               ],
             ),
-            const SizedBox(height: 16),
+            r.verticalSpace(16),
             Row(
               children: [
-                Icon(Icons.person_outline, size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: 4),
-                Text('Client #${order.clientId ?? "N/A"}', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
-                const SizedBox(width: 16),
-                Icon(Icons.access_time, size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: 4),
-                Text(order.dateCommande?.toString().substring(0, 10) ?? '', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                Icon(Icons.person_outline, size: r.iconSize(16), color: AppColors.textSecondary),
+                SizedBox(width: r.space(4)),
+                Text('Client #${order.clientId ?? "N/A"}', style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
+                SizedBox(width: r.space(16)),
+                Icon(Icons.access_time, size: r.iconSize(16), color: AppColors.textSecondary),
+                SizedBox(width: r.space(4)),
+                Text(order.dateCommande?.toString().substring(0, 10) ?? '', style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
               ],
             ),
-            const SizedBox(height: 16),
+            r.verticalSpace(16),
             Row(
               children: [
                 if (!isMine) ...[
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => _acceptOrder(order, provider),
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text('Accepter'),
+                      icon: Icon(Icons.check, size: r.iconSize(18)),
+                      label: Text('Accepter', style: TextStyle(fontSize: r.fontSize(13))),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.success,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
                       ),
                     ),
                   ),
@@ -850,12 +853,12 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () => _updateStatus(order, 'shipped', provider),
-                        icon: const Icon(Icons.local_shipping, size: 18),
-                        label: const Text('En route'),
+                        icon: Icon(Icons.local_shipping, size: r.iconSize(18)),
+                        label: Text('En route', style: TextStyle(fontSize: r.fontSize(13))),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.statusShipped,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
                         ),
                       ),
                     ),
@@ -863,38 +866,38 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () => _updateStatus(order, 'delivered', provider),
-                        icon: const Icon(Icons.check_circle, size: 18),
-                        label: const Text('Livré'),
+                        icon: Icon(Icons.check_circle, size: r.iconSize(18)),
+                        label: Text('Livré', style: TextStyle(fontSize: r.fontSize(13))),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.success,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
                         ),
                       ),
                     ),
                   if (order.status == 'delivered')
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding: EdgeInsets.symmetric(vertical: r.space(12)),
                         decoration: BoxDecoration(
                           color: AppColors.success.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(r.radius(10)),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.check_circle, color: AppColors.success),
-                            const SizedBox(width: 8),
-                            Text('Livraison terminée', style: AppStyles.bodyMedium.copyWith(color: AppColors.success)),
+                            Icon(Icons.check_circle, color: AppColors.success, size: r.iconSize(20)),
+                            SizedBox(width: r.space(8)),
+                            Text('Livraison terminée', style: AppStyles.bodyMediumR(r).copyWith(color: AppColors.success)),
                           ],
                         ),
                       ),
                     ),
                 ],
-                const SizedBox(width: 8),
+                SizedBox(width: r.space(8)),
                 IconButton(
                   onPressed: () => _showOrderOnMap(order),
-                  icon: const Icon(Icons.map_outlined),
+                  icon: Icon(Icons.map_outlined, size: r.iconSize(24)),
                   color: AppColors.primary,
                   tooltip: 'Voir sur la carte',
                 ),

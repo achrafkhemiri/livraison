@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
+import '../../../core/constants/responsive.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../providers/providers.dart';
@@ -94,26 +95,23 @@ class _OrderListScreenState extends State<OrderListScreen> {
   // ── Build ───────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallPhone = screenWidth < 360;
-    final isMediumPhone = screenWidth >= 360 && screenWidth < 400;
-    final horizontalPadding = isSmallPhone ? 12.0 : 16.0;
+    final r = Responsive(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(context, isSmallPhone),
-            _buildSearchBar(horizontalPadding, isSmallPhone),
-            _buildStatusChips(isSmallPhone),
-            if (_showFilters) _buildDateFilter(horizontalPadding, isSmallPhone),
-            if (_hasActiveFilters) _buildActiveFiltersBanner(horizontalPadding),
-            _buildResultsHeader(horizontalPadding, isSmallPhone),
+            _buildHeader(context, r),
+            _buildSearchBar(r),
+            _buildStatusChips(r),
+            if (_showFilters) _buildDateFilter(r),
+            if (_hasActiveFilters) _buildActiveFiltersBanner(r),
+            _buildResultsHeader(r),
             Expanded(
-              child: _buildOrdersList(horizontalPadding, isSmallPhone, isMediumPhone),
+              child: _buildOrdersList(r),
             ),
-            _buildPaginationControls(isSmallPhone),
+            _buildPaginationControls(r),
           ],
         ),
       ),
@@ -122,13 +120,13 @@ class _OrderListScreenState extends State<OrderListScreen> {
   }
 
   // ── Header ──────────────────────────────────────────────────
-  Widget _buildHeader(BuildContext context, bool isSmall) {
+  Widget _buildHeader(BuildContext context, Responsive r) {
     return Container(
       decoration: BoxDecoration(
         gradient: AppColors.primaryGradient,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(r.radius(24)),
+          bottomRight: Radius.circular(r.radius(24)),
         ),
         boxShadow: [
           BoxShadow(
@@ -138,40 +136,34 @@ class _OrderListScreenState extends State<OrderListScreen> {
           ),
         ],
       ),
-      padding: EdgeInsets.fromLTRB(isSmall ? 12 : 16, 12, isSmall ? 12 : 16, 20),
+      padding: EdgeInsets.fromLTRB(r.space(16), r.space(12), r.space(16), r.space(20)),
       child: Row(
         children: [
           Material(
             color: Colors.white.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(r.radius(12)),
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(r.radius(12)),
               onTap: () => Navigator.pop(context),
-              child: const Padding(
-                padding: EdgeInsets.all(8),
-                child: Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+              child: Padding(
+                padding: r.paddingAll(8),
+                child: Icon(Icons.arrow_back_ios_new, color: Colors.white, size: r.iconSize(20)),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: r.space(12)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Commandes',
-                  style: AppStyles.headingMedium.copyWith(
-                    color: Colors.white,
-                    fontSize: isSmall ? 18 : 22,
-                  ),
+                  style: AppStyles.headingMediumR(r).copyWith(color: Colors.white),
                 ),
                 Consumer<OrderProvider>(
                   builder: (_, provider, __) => Text(
                     '${provider.totalElements} commande${provider.totalElements > 1 ? 's' : ''}',
-                    style: AppStyles.bodySmall.copyWith(
-                      color: Colors.white70,
-                      fontSize: isSmall ? 11 : 12,
-                    ),
+                    style: AppStyles.bodySmallR(r).copyWith(color: Colors.white70),
                   ),
                 ),
               ],
@@ -179,28 +171,28 @@ class _OrderListScreenState extends State<OrderListScreen> {
           ),
           Material(
             color: Colors.white.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(r.radius(12)),
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(r.radius(12)),
               onTap: () {
                 setState(() => _showFilters = !_showFilters);
               },
               child: Padding(
-                padding: const EdgeInsets.all(8),
+                padding: r.paddingAll(8),
                 child: Stack(
                   children: [
                     Icon(
                       _showFilters ? Icons.filter_alt : Icons.filter_alt_outlined,
                       color: Colors.white,
-                      size: 22,
+                      size: r.iconSize(22),
                     ),
                     if (_hasActiveFilters)
                       Positioned(
                         right: 0,
                         top: 0,
                         child: Container(
-                          width: 8,
-                          height: 8,
+                          width: r.scale(8),
+                          height: r.scale(8),
                           decoration: const BoxDecoration(
                             color: Colors.redAccent,
                             shape: BoxShape.circle,
@@ -212,17 +204,16 @@ class _OrderListScreenState extends State<OrderListScreen> {
               ),
             ),
           ),
-          // Small round '+' button placed next to filter
-          const SizedBox(width: 8),
+          SizedBox(width: r.space(8)),
           Material(
             color: Colors.white.withOpacity(0.2),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(r.radius(12)))),
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(r.radius(12)),
               onTap: () => _showCreateOrderDialog(context),
-              child: const Padding(
-                padding: EdgeInsets.all(8),
-                child: Icon(Icons.add, color: Colors.white, size: 20),
+              child: Padding(
+                padding: r.paddingAll(8),
+                child: Icon(Icons.add, color: Colors.white, size: r.iconSize(20)),
               ),
             ),
           ),
@@ -232,13 +223,13 @@ class _OrderListScreenState extends State<OrderListScreen> {
   }
 
   // ── Search Bar ──────────────────────────────────────────────
-  Widget _buildSearchBar(double hPad, bool isSmall) {
+  Widget _buildSearchBar(Responsive r) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 8),
+      padding: EdgeInsets.fromLTRB(r.space(16), r.space(16), r.space(16), r.space(8)),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(r.radius(16)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.06),
@@ -250,17 +241,14 @@ class _OrderListScreenState extends State<OrderListScreen> {
         child: TextField(
           controller: _searchController,
           onChanged: _onSearchChanged,
-          style: AppStyles.bodyMedium.copyWith(fontSize: isSmall ? 13 : 14),
+          style: AppStyles.bodyMediumR(r),
           decoration: InputDecoration(
             hintText: 'Rechercher par n°, client, livreur...',
-            hintStyle: AppStyles.bodyMedium.copyWith(
-              color: AppColors.textHint,
-              fontSize: isSmall ? 12 : 14,
-            ),
-            prefixIcon: Icon(Icons.search, color: AppColors.textSecondary, size: isSmall ? 20 : 22),
+            hintStyle: AppStyles.bodyMediumR(r).copyWith(color: AppColors.textHint),
+            prefixIcon: Icon(Icons.search, color: AppColors.textSecondary, size: r.iconSize(22)),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
-                    icon: Icon(Icons.clear, color: AppColors.textSecondary, size: isSmall ? 18 : 20),
+                    icon: Icon(Icons.clear, color: AppColors.textSecondary, size: r.iconSize(20)),
                     onPressed: () {
                       _searchController.clear();
                       _loadOrders();
@@ -269,8 +257,8 @@ class _OrderListScreenState extends State<OrderListScreen> {
                 : null,
             border: InputBorder.none,
             contentPadding: EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: isSmall ? 12 : 14,
+              horizontal: r.space(16),
+              vertical: r.space(14),
             ),
           ),
         ),
@@ -279,14 +267,14 @@ class _OrderListScreenState extends State<OrderListScreen> {
   }
 
   // ── Status Chips ────────────────────────────────────────────
-  Widget _buildStatusChips(bool isSmall) {
+  Widget _buildStatusChips(Responsive r) {
     return SizedBox(
-      height: isSmall ? 42 : 48,
+      height: r.scale(48),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 16),
+        padding: EdgeInsets.symmetric(horizontal: r.space(16)),
         itemCount: _statusOptions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, __) => SizedBox(width: r.space(8)),
         itemBuilder: (context, index) {
           final option = _statusOptions[index];
           final isSelected = _selectedStatus == option['value'];
@@ -297,8 +285,8 @@ class _OrderListScreenState extends State<OrderListScreen> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: EdgeInsets.symmetric(
-                horizontal: isSmall ? 10 : 14,
-                vertical: isSmall ? 6 : 8,
+                horizontal: r.space(14),
+                vertical: r.space(8),
               ),
               decoration: BoxDecoration(
                 color: isSelected ? color : Colors.white,
@@ -322,14 +310,14 @@ class _OrderListScreenState extends State<OrderListScreen> {
                 children: [
                   Icon(
                     option['icon'] as IconData,
-                    size: isSmall ? 14 : 16,
+                    size: r.iconSize(16),
                     color: isSelected ? Colors.white : color,
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: r.space(6)),
                   Text(
                     option['label'] as String,
                     style: TextStyle(
-                      fontSize: isSmall ? 11 : 12,
+                      fontSize: r.fontSize(12),
                       fontWeight: FontWeight.w600,
                       color: isSelected ? Colors.white : AppColors.textPrimary,
                     ),
@@ -344,16 +332,16 @@ class _OrderListScreenState extends State<OrderListScreen> {
   }
 
   // ── Date Filter Panel ───────────────────────────────────────
-  Widget _buildDateFilter(double hPad, bool isSmall) {
+  Widget _buildDateFilter(Responsive r) {
     final dateFormat = DateFormat('dd/MM/yyyy');
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      margin: EdgeInsets.fromLTRB(hPad, 8, hPad, 0),
-      padding: const EdgeInsets.all(14),
+      margin: EdgeInsets.fromLTRB(r.space(16), r.space(8), r.space(16), 0),
+      padding: r.paddingAll(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(r.radius(16)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -367,14 +355,11 @@ class _OrderListScreenState extends State<OrderListScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.date_range, size: 18, color: AppColors.primary),
-              const SizedBox(width: 8),
+              Icon(Icons.date_range, size: r.iconSize(18), color: AppColors.primary),
+              SizedBox(width: r.space(8)),
               Text(
                 'Filtrer par date',
-                style: AppStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontSize: isSmall ? 13 : 14,
-                ),
+                style: AppStyles.bodyMediumR(r).copyWith(fontWeight: FontWeight.w600),
               ),
               const Spacer(),
               if (_dateFrom != null || _dateTo != null)
@@ -387,18 +372,18 @@ class _OrderListScreenState extends State<OrderListScreen> {
                     _loadOrders();
                   },
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    padding: EdgeInsets.symmetric(horizontal: r.space(8)),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: Text(
                     'Effacer',
-                    style: TextStyle(fontSize: isSmall ? 11 : 12, color: AppColors.error),
+                    style: TextStyle(fontSize: r.fontSize(12), color: AppColors.error),
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 10),
+          r.verticalSpace(10),
           Row(
             children: [
               Expanded(
@@ -406,7 +391,7 @@ class _OrderListScreenState extends State<OrderListScreen> {
                   label: 'Du',
                   date: _dateFrom,
                   dateFormat: dateFormat,
-                  isSmall: isSmall,
+                  r: r,
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
@@ -421,16 +406,16 @@ class _OrderListScreenState extends State<OrderListScreen> {
                   },
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Icon(Icons.arrow_forward, size: 16, color: AppColors.textSecondary),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: r.space(8)),
+                child: Icon(Icons.arrow_forward, size: r.iconSize(16), color: AppColors.textSecondary),
               ),
               Expanded(
                 child: _buildDatePickerButton(
                   label: 'Au',
                   date: _dateTo,
                   dateFormat: dateFormat,
-                  isSmall: isSmall,
+                  r: r,
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
@@ -456,17 +441,17 @@ class _OrderListScreenState extends State<OrderListScreen> {
     required String label,
     required DateTime? date,
     required DateFormat dateFormat,
-    required bool isSmall,
+    required Responsive r,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(r.radius(12)),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 10 : 12),
+        padding: EdgeInsets.symmetric(horizontal: r.space(12), vertical: r.space(12)),
         decoration: BoxDecoration(
           color: date != null ? AppColors.primary.withOpacity(0.08) : AppColors.background,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(r.radius(12)),
           border: Border.all(
             color: date != null ? AppColors.primary.withOpacity(0.3) : AppColors.border,
           ),
@@ -475,15 +460,15 @@ class _OrderListScreenState extends State<OrderListScreen> {
           children: [
             Icon(
               Icons.calendar_today,
-              size: isSmall ? 14 : 16,
+              size: r.iconSize(16),
               color: date != null ? AppColors.primary : AppColors.textSecondary,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: r.space(8)),
             Expanded(
               child: Text(
                 date != null ? dateFormat.format(date) : label,
                 style: TextStyle(
-                  fontSize: isSmall ? 12 : 13,
+                  fontSize: r.fontSize(13),
                   color: date != null ? AppColors.primary : AppColors.textHint,
                   fontWeight: date != null ? FontWeight.w600 : FontWeight.normal,
                 ),
@@ -497,37 +482,37 @@ class _OrderListScreenState extends State<OrderListScreen> {
   }
 
   // ── Active Filters Banner ───────────────────────────────────
-  Widget _buildActiveFiltersBanner(double hPad) {
+  Widget _buildActiveFiltersBanner(Responsive r) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 0),
+      padding: EdgeInsets.fromLTRB(r.space(16), r.space(8), r.space(16), 0),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: r.space(12), vertical: r.space(8)),
         decoration: BoxDecoration(
           color: AppColors.info.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(r.radius(10)),
           border: Border.all(color: AppColors.info.withOpacity(0.2)),
         ),
         child: Row(
           children: [
-            const Icon(Icons.filter_list, size: 16, color: AppColors.info),
-            const SizedBox(width: 8),
-            const Expanded(
+            Icon(Icons.filter_list, size: r.iconSize(16), color: AppColors.info),
+            SizedBox(width: r.space(8)),
+            Expanded(
               child: Text(
                 'Filtres actifs',
-                style: TextStyle(fontSize: 12, color: AppColors.info, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: r.fontSize(12), color: AppColors.info, fontWeight: FontWeight.w600),
               ),
             ),
             GestureDetector(
               onTap: _clearFilters,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: EdgeInsets.symmetric(horizontal: r.space(10), vertical: r.space(4)),
                 decoration: BoxDecoration(
                   color: AppColors.info.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(r.radius(8)),
                 ),
-                child: const Text(
+                child: Text(
                   'Effacer tout',
-                  style: TextStyle(fontSize: 11, color: AppColors.info, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: r.fontSize(11), color: AppColors.info, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -538,41 +523,37 @@ class _OrderListScreenState extends State<OrderListScreen> {
   }
 
   // ── Results Header ──────────────────────────────────────────
-  Widget _buildResultsHeader(double hPad, bool isSmall) {
+  Widget _buildResultsHeader(Responsive r) {
     return Consumer<OrderProvider>(
       builder: (_, provider, __) {
         if (provider.isLoadingPage) return const SizedBox.shrink();
         return Padding(
-          padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 4),
+          padding: EdgeInsets.fromLTRB(r.space(16), r.space(10), r.space(16), r.space(4)),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 '${provider.totalElements} résultat${provider.totalElements > 1 ? 's' : ''}',
-                style: AppStyles.caption.copyWith(
-                  color: AppColors.textSecondary,
-                  fontSize: isSmall ? 11 : 12,
-                ),
+                style: AppStyles.captionR(r).copyWith(color: AppColors.textSecondary),
               ),
               Row(
                 children: [
-                  // Page size selector (smaller square)
                   Container(
-                    margin: const EdgeInsets.only(right: 8),
+                    margin: EdgeInsets.only(right: r.space(8)),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(r.radius(6)),
                       border: Border.all(color: AppColors.border),
                     ),
                     child: SizedBox(
-                      width: 52,
-                      height: 36,
+                      width: r.scale(52),
+                      height: r.scale(36),
                       child: DropdownButton<int>(
                         isExpanded: true,
                         alignment: Alignment.center,
                         value: provider.pageSize,
-                        iconSize: 18,
-                        style: AppStyles.bodySmall.copyWith(fontSize: 12),
+                        iconSize: r.iconSize(18),
+                        style: AppStyles.bodySmallR(r),
                         underline: const SizedBox.shrink(),
                         items: const [5, 10, 15].map((v) {
                           return DropdownMenuItem<int>(
@@ -597,10 +578,7 @@ class _OrderListScreenState extends State<OrderListScreen> {
                   if (provider.totalPages > 1)
                     Text(
                       'Page ${provider.currentPage + 1}/${provider.totalPages}',
-                      style: AppStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: isSmall ? 11 : 12,
-                      ),
+                      style: AppStyles.captionR(r).copyWith(color: AppColors.textSecondary),
                     ),
                 ],
               ),
@@ -612,7 +590,7 @@ class _OrderListScreenState extends State<OrderListScreen> {
   }
 
   // ── Orders List ─────────────────────────────────────────────
-  Widget _buildOrdersList(double hPad, bool isSmall, bool isMedium) {
+  Widget _buildOrdersList(Responsive r) {
     return Consumer<OrderProvider>(
       builder: (context, provider, _) {
         if (provider.isLoadingPage) {
@@ -621,10 +599,10 @@ class _OrderListScreenState extends State<OrderListScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const CircularProgressIndicator(strokeWidth: 3),
-                const SizedBox(height: 16),
+                r.verticalSpace(16),
                 Text(
                   'Chargement...',
-                  style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                  style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -634,40 +612,40 @@ class _OrderListScreenState extends State<OrderListScreen> {
         if (provider.errorMessage != null) {
           return Center(
             child: Padding(
-              padding: EdgeInsets.all(hPad),
+              padding: r.paddingAll(16),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: r.paddingAll(20),
                     decoration: BoxDecoration(
                       color: AppColors.error.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                    child: Icon(Icons.error_outline, size: r.iconSize(48), color: AppColors.error),
                   ),
-                  const SizedBox(height: 16),
+                  r.verticalSpace(16),
                   Text(
                     'Erreur de chargement',
-                    style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+                    style: AppStyles.bodyLargeR(r).copyWith(fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 8),
+                  r.verticalSpace(8),
                   Text(
                     provider.errorMessage!,
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                     textAlign: TextAlign.center,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 20),
+                  r.verticalSpace(20),
                   ElevatedButton.icon(
                     onPressed: _loadOrders,
-                    icon: const Icon(Icons.refresh, size: 18),
+                    icon: Icon(Icons.refresh, size: r.iconSize(18)),
                     label: const Text('Réessayer'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(12))),
                     ),
                   ),
                 ],
@@ -682,37 +660,34 @@ class _OrderListScreenState extends State<OrderListScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  padding: r.paddingAll(24),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withOpacity(0.06),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     Icons.inbox_outlined,
-                    size: isSmall ? 48 : 64,
+                    size: r.iconSize(64),
                     color: AppColors.primary.withOpacity(0.4),
                   ),
                 ),
-                const SizedBox(height: 16),
+                r.verticalSpace(16),
                 Text(
                   _hasActiveFilters ? 'Aucun résultat trouvé' : 'Aucune commande',
-                  style: AppStyles.bodyLarge.copyWith(
-                    fontWeight: FontWeight.w600,
-                    fontSize: isSmall ? 14 : 16,
-                  ),
+                  style: AppStyles.bodyLargeR(r).copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
+                r.verticalSpace(8),
                 Text(
                   _hasActiveFilters
                       ? 'Essayez de modifier vos filtres'
                       : 'Les commandes apparaîtront ici',
-                  style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                  style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                 ),
                 if (_hasActiveFilters) ...[
-                  const SizedBox(height: 16),
+                  r.verticalSpace(16),
                   TextButton.icon(
                     onPressed: _clearFilters,
-                    icon: const Icon(Icons.clear_all, size: 18),
+                    icon: Icon(Icons.clear_all, size: r.iconSize(18)),
                     label: const Text('Effacer les filtres'),
                     style: TextButton.styleFrom(foregroundColor: AppColors.primary),
                   ),
@@ -726,11 +701,11 @@ class _OrderListScreenState extends State<OrderListScreen> {
           onRefresh: () => provider.refreshCurrentPage(),
           color: AppColors.primary,
           child: ListView.builder(
-            padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 80),
+            padding: EdgeInsets.fromLTRB(r.space(16), r.space(8), r.space(16), r.space(80)),
             itemCount: provider.paginatedOrders.length,
             itemBuilder: (context, index) {
               final order = provider.paginatedOrders[index];
-              return _buildOrderCard(order, provider, isSmall, isMedium);
+              return _buildOrderCard(order, provider, r);
             },
           ),
         );
@@ -739,15 +714,15 @@ class _OrderListScreenState extends State<OrderListScreen> {
   }
 
   // ── Order Card ──────────────────────────────────────────────
-  Widget _buildOrderCard(Order order, OrderProvider provider, bool isSmall, bool isMedium) {
+  Widget _buildOrderCard(Order order, OrderProvider provider, Responsive r) {
     final statusInfo = _getStatusInfo(order.status);
     final dateFormat = DateFormat('dd MMM yyyy, HH:mm', 'fr_FR');
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: r.space(12)),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(r.radius(16)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -758,12 +733,12 @@ class _OrderListScreenState extends State<OrderListScreen> {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(r.radius(16)),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(r.radius(16)),
           onTap: () => _showOrderDetails(order),
           child: Padding(
-            padding: EdgeInsets.all(isSmall ? 12 : 16),
+            padding: r.paddingAll(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -772,8 +747,8 @@ class _OrderListScreenState extends State<OrderListScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      width: isSmall ? 36 : 44,
-                      height: isSmall ? 36 : 44,
+                      width: r.scale(44),
+                      height: r.scale(44),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
@@ -783,15 +758,15 @@ class _OrderListScreenState extends State<OrderListScreen> {
                             statusInfo.color.withOpacity(0.08),
                           ],
                         ),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(r.radius(12)),
                       ),
                       child: Icon(
                         statusInfo.icon,
                         color: statusInfo.color,
-                        size: isSmall ? 18 : 22,
+                        size: r.iconSize(22),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: r.space(12)),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -801,27 +776,24 @@ class _OrderListScreenState extends State<OrderListScreen> {
                               Expanded(
                                 child: Text(
                                   'CMD ${order.id}',
-                                  style: AppStyles.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: isSmall ? 13 : 15,
-                                  ),
+                                  style: AppStyles.bodyMediumR(r).copyWith(fontWeight: FontWeight.w700),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               Container(
                                 padding: EdgeInsets.symmetric(
-                                  horizontal: isSmall ? 8 : 10,
-                                  vertical: 4,
+                                  horizontal: r.space(10),
+                                  vertical: r.space(4),
                                 ),
                                 decoration: BoxDecoration(
                                   color: statusInfo.color.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: BorderRadius.circular(r.radius(20)),
                                 ),
                                 child: Text(
                                   statusInfo.label,
                                   style: TextStyle(
-                                    fontSize: isSmall ? 10 : 11,
+                                    fontSize: r.fontSize(11),
                                     fontWeight: FontWeight.w700,
                                     color: statusInfo.color,
                                   ),
@@ -836,7 +808,6 @@ class _OrderListScreenState extends State<OrderListScreen> {
                                 : 'Date inconnue',
                             style: AppStyles.caption.copyWith(
                               color: AppColors.textSecondary,
-                              fontSize: isSmall ? 10 : 11,
                             ),
                           ),
                         ],
@@ -844,9 +815,9 @@ class _OrderListScreenState extends State<OrderListScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                r.verticalSpace(12),
                 Container(height: 1, color: AppColors.divider.withOpacity(0.5)),
-                const SizedBox(height: 12),
+                r.verticalSpace(12),
                 // Details section — adaptive layout
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -856,16 +827,16 @@ class _OrderListScreenState extends State<OrderListScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildInfoRow(Icons.person_outline, 'Client',
-                              order.clientNom ?? 'Client #${order.clientId}', isSmall),
-                          const SizedBox(height: 6),
+                              order.clientNom ?? 'Client #${order.clientId}', r),
+                          r.verticalSpace(6),
                           _buildInfoRow(Icons.delivery_dining, 'Livreur',
-                              order.livreurNom ?? (order.livreurId != null ? '#${order.livreurId}' : 'Non assigné'), isSmall),
-                          const SizedBox(height: 8),
+                              order.livreurNom ?? (order.livreurId != null ? '#${order.livreurId}' : 'Non assigné'), r),
+                          r.verticalSpace(8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              _buildAmountBadge(order, isSmall),
-                              _buildActionsButton(order, provider, isSmall),
+                              _buildAmountBadge(order, r),
+                              _buildActionsButton(order, provider, r),
                             ],
                           ),
                         ],
@@ -877,21 +848,21 @@ class _OrderListScreenState extends State<OrderListScreen> {
                           children: [
                             Expanded(
                               child: _buildInfoRow(Icons.person_outline, 'Client',
-                                  order.clientNom ?? 'Client #${order.clientId}', isSmall),
+                                  order.clientNom ?? 'Client #${order.clientId}', r),
                             ),
-                            const SizedBox(width: 12),
+                            SizedBox(width: r.space(12)),
                             Expanded(
                               child: _buildInfoRow(Icons.delivery_dining, 'Livreur',
-                                  order.livreurNom ?? (order.livreurId != null ? '#${order.livreurId}' : 'Non assigné'), isSmall),
+                                  order.livreurNom ?? (order.livreurId != null ? '#${order.livreurId}' : 'Non assigné'), r),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
+                        r.verticalSpace(10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildAmountBadge(order, isSmall),
-                            _buildActionsButton(order, provider, isSmall),
+                            _buildAmountBadge(order, r),
+                            _buildActionsButton(order, provider, r),
                           ],
                         ),
                       ],
@@ -906,12 +877,12 @@ class _OrderListScreenState extends State<OrderListScreen> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value, bool isSmall) {
+  Widget _buildInfoRow(IconData icon, String label, String value, Responsive r) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: isSmall ? 14 : 16, color: AppColors.textSecondary),
-        const SizedBox(width: 6),
+        Icon(icon, size: r.iconSize(16), color: AppColors.textSecondary),
+        SizedBox(width: r.space(6)),
         Flexible(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -919,7 +890,7 @@ class _OrderListScreenState extends State<OrderListScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: isSmall ? 9 : 10,
+                  fontSize: r.fontSize(10),
                   color: AppColors.textHint,
                   fontWeight: FontWeight.w500,
                 ),
@@ -927,7 +898,7 @@ class _OrderListScreenState extends State<OrderListScreen> {
               Text(
                 value,
                 style: TextStyle(
-                  fontSize: isSmall ? 11 : 12,
+                  fontSize: r.fontSize(12),
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w600,
                 ),
@@ -941,25 +912,25 @@ class _OrderListScreenState extends State<OrderListScreen> {
     );
   }
 
-  Widget _buildAmountBadge(Order order, bool isSmall) {
+  Widget _buildAmountBadge(Order order, Responsive r) {
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: isSmall ? 10 : 12,
-        vertical: isSmall ? 6 : 8,
+        horizontal: r.space(12),
+        vertical: r.space(8),
       ),
       decoration: BoxDecoration(
         color: AppColors.accent.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(r.radius(12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.payments_outlined, size: isSmall ? 14 : 16, color: AppColors.accent),
-          const SizedBox(width: 6),
+          Icon(Icons.payments_outlined, size: r.iconSize(16), color: AppColors.accent),
+          SizedBox(width: r.space(6)),
           Text(
             '${order.montantTTC?.toStringAsFixed(2) ?? "0.00"} TND',
             style: TextStyle(
-              fontSize: isSmall ? 12 : 13,
+              fontSize: r.fontSize(13),
               fontWeight: FontWeight.w700,
               color: AppColors.accent,
             ),
@@ -969,28 +940,28 @@ class _OrderListScreenState extends State<OrderListScreen> {
     );
   }
 
-  Widget _buildActionsButton(Order order, OrderProvider provider, bool isSmall) {
+  Widget _buildActionsButton(Order order, OrderProvider provider, Responsive r) {
     return PopupMenuButton<String>(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(12))),
       elevation: 4,
       child: Container(
         padding: EdgeInsets.symmetric(
-          horizontal: isSmall ? 10 : 12,
-          vertical: isSmall ? 6 : 8,
+          horizontal: r.space(12),
+          vertical: r.space(8),
         ),
         decoration: BoxDecoration(
           color: AppColors.primary.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(r.radius(12)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.more_horiz, size: isSmall ? 16 : 18, color: AppColors.primary),
-            const SizedBox(width: 4),
+            Icon(Icons.more_horiz, size: r.iconSize(18), color: AppColors.primary),
+            SizedBox(width: r.space(4)),
             Text(
               'Actions',
               style: TextStyle(
-                fontSize: isSmall ? 11 : 12,
+                fontSize: r.fontSize(12),
                 fontWeight: FontWeight.w600,
                 color: AppColors.primary,
               ),
@@ -1025,21 +996,21 @@ class _OrderListScreenState extends State<OrderListScreen> {
         children: [
           Icon(icon, size: 20, color: color),
           const SizedBox(width: 12),
-          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w500, fontSize: 14)),
         ],
       ),
     );
   }
 
   // ── Pagination Controls ─────────────────────────────────────
-  Widget _buildPaginationControls(bool isSmall) {
+  Widget _buildPaginationControls(Responsive r) {
     return Consumer<OrderProvider>(
       builder: (_, provider, __) {
         if (provider.totalPages <= 1) return const SizedBox.shrink();
         return Container(
           padding: EdgeInsets.symmetric(
-            horizontal: isSmall ? 12 : 16,
-            vertical: 10,
+            horizontal: r.space(16),
+            vertical: r.space(10),
           ),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -1057,15 +1028,15 @@ class _OrderListScreenState extends State<OrderListScreen> {
               _buildPaginationButton(
                 icon: Icons.chevron_left,
                 onTap: provider.isFirstPage ? null : () => provider.previousPage(),
-                isSmall: isSmall,
+                r: r,
               ),
-              const SizedBox(width: 8),
-              ..._buildPageNumbers(provider, isSmall),
-              const SizedBox(width: 8),
+              SizedBox(width: r.space(8)),
+              ..._buildPageNumbers(provider, r),
+              SizedBox(width: r.space(8)),
               _buildPaginationButton(
                 icon: Icons.chevron_right,
                 onTap: provider.isLastPage ? null : () => provider.nextPage(),
-                isSmall: isSmall,
+                r: r,
               ),
             ],
           ),
@@ -1074,7 +1045,7 @@ class _OrderListScreenState extends State<OrderListScreen> {
     );
   }
 
-  List<Widget> _buildPageNumbers(OrderProvider provider, bool isSmall) {
+  List<Widget> _buildPageNumbers(OrderProvider provider, Responsive r) {
     final List<Widget> buttons = [];
     final current = provider.currentPage;
     final total = provider.totalPages;
@@ -1090,49 +1061,49 @@ class _OrderListScreenState extends State<OrderListScreen> {
     }
 
     if (start > 0) {
-      buttons.add(_buildPageButton(0, current == 0, provider, isSmall));
+      buttons.add(_buildPageButton(0, current == 0, provider, r));
       if (start > 1) {
         buttons.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text('...', style: TextStyle(color: AppColors.textSecondary, fontSize: isSmall ? 12 : 14)),
+          padding: EdgeInsets.symmetric(horizontal: r.space(4)),
+          child: Text('...', style: TextStyle(color: AppColors.textSecondary, fontSize: r.fontSize(14))),
         ));
       }
     }
 
     for (int i = start; i <= end; i++) {
-      buttons.add(_buildPageButton(i, i == current, provider, isSmall));
+      buttons.add(_buildPageButton(i, i == current, provider, r));
     }
 
     if (end < total - 1) {
       if (end < total - 2) {
         buttons.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text('...', style: TextStyle(color: AppColors.textSecondary, fontSize: isSmall ? 12 : 14)),
+          padding: EdgeInsets.symmetric(horizontal: r.space(4)),
+          child: Text('...', style: TextStyle(color: AppColors.textSecondary, fontSize: r.fontSize(14))),
         ));
       }
-      buttons.add(_buildPageButton(total - 1, current == total - 1, provider, isSmall));
+      buttons.add(_buildPageButton(total - 1, current == total - 1, provider, r));
     }
 
     return buttons;
   }
 
-  Widget _buildPageButton(int page, bool isActive, OrderProvider provider, bool isSmall) {
+  Widget _buildPageButton(int page, bool isActive, OrderProvider provider, Responsive r) {
     return GestureDetector(
       onTap: isActive ? null : () => provider.goToPage(page),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: isSmall ? 32 : 36,
-        height: isSmall ? 32 : 36,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
+        width: r.scale(36),
+        height: r.scale(36),
+        margin: EdgeInsets.symmetric(horizontal: r.space(2)),
         decoration: BoxDecoration(
           color: isActive ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(r.radius(10)),
         ),
         child: Center(
           child: Text(
             '${page + 1}',
             style: TextStyle(
-              fontSize: isSmall ? 12 : 13,
+              fontSize: r.fontSize(13),
               fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
               color: isActive ? Colors.white : AppColors.textSecondary,
             ),
@@ -1145,21 +1116,21 @@ class _OrderListScreenState extends State<OrderListScreen> {
   Widget _buildPaginationButton({
     required IconData icon,
     required VoidCallback? onTap,
-    required bool isSmall,
+    required Responsive r,
   }) {
     final isDisabled = onTap == null;
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: isSmall ? 32 : 36,
-        height: isSmall ? 32 : 36,
+        width: r.scale(36),
+        height: r.scale(36),
         decoration: BoxDecoration(
           color: isDisabled ? AppColors.background : AppColors.primary.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(r.radius(10)),
         ),
         child: Icon(
           icon,
-          size: isSmall ? 18 : 20,
+          size: r.iconSize(20),
           color: isDisabled ? AppColors.textHint : AppColors.primary,
         ),
       ),

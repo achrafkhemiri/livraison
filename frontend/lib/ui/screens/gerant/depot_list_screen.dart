@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
+import '../../../core/constants/responsive.dart';
 import '../../../data/models/models.dart';
 import '../../../providers/providers.dart';
 
@@ -30,15 +31,16 @@ class _DepotListScreenState extends State<DepotListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final r = Responsive(context);
     final magasinId = widget.magasinId ?? (ModalRoute.of(context)?.settings.arguments as int?);
     
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
-        title: Text('Dépôts', style: AppStyles.headingMedium.copyWith(color: Colors.white)),
+        title: Text('Dépôts', style: AppStyles.headingMediumR(r).copyWith(color: Colors.white)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: Colors.white, size: r.iconSize(24)),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -53,10 +55,10 @@ class _DepotListScreenState extends State<DepotListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                  const SizedBox(height: 16),
-                  Text(provider.errorMessage!, style: AppStyles.bodyMedium),
-                  const SizedBox(height: 16),
+                  Icon(Icons.error_outline, size: r.iconSize(48), color: AppColors.error),
+                  r.verticalSpace(16),
+                  Text(provider.errorMessage!, style: AppStyles.bodyMediumR(r)),
+                  r.verticalSpace(16),
                   ElevatedButton(
                     onPressed: () {
                       if (magasinId != null) {
@@ -77,11 +79,11 @@ class _DepotListScreenState extends State<DepotListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.warehouse_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
-                  const SizedBox(height: 16),
-                  Text('Aucun dépôt', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
-                  const SizedBox(height: 8),
-                  Text('Ajoutez votre premier dépôt', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                  Icon(Icons.warehouse_outlined, size: r.iconSize(64), color: AppColors.textSecondary.withOpacity(0.5)),
+                  r.verticalSpace(16),
+                  Text('Aucun dépôt', style: AppStyles.bodyLargeR(r).copyWith(color: AppColors.textSecondary)),
+                  r.verticalSpace(8),
+                  Text('Ajoutez votre premier dépôt', style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
                 ],
               ),
             );
@@ -95,13 +97,18 @@ class _DepotListScreenState extends State<DepotListScreen> {
                 await provider.loadDepotsWithStocks();
               }
             },
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: provider.depots.length,
-              itemBuilder: (context, index) {
-                final depot = provider.depots[index];
-                return _buildDepotCard(depot, provider);
-              },
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: r.maxContentWidth),
+                child: ListView.builder(
+                  padding: r.paddingAll(16),
+                  itemCount: provider.depots.length,
+                  itemBuilder: (context, index) {
+                    final depot = provider.depots[index];
+                    return _buildDepotCard(depot, provider, r);
+                  },
+                ),
+              ),
             ),
           );
         },
@@ -114,38 +121,38 @@ class _DepotListScreenState extends State<DepotListScreen> {
     );
   }
 
-  Widget _buildDepotCard(Depot depot, DepotProvider provider) {
+  Widget _buildDepotCard(Depot depot, DepotProvider provider, Responsive r) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: EdgeInsets.only(bottom: r.space(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(12))),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
+        contentPadding: r.paddingAll(16),
         leading: Container(
-          width: 50,
-          height: 50,
+          width: r.scale(50),
+          height: r.scale(50),
           decoration: BoxDecoration(
             color: Colors.orange.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(r.radius(12)),
           ),
-          child: const Icon(Icons.warehouse, color: Colors.orange),
+          child: Icon(Icons.warehouse, color: Colors.orange, size: r.iconSize(24)),
         ),
         title: Text(
           depot.nom ?? 'Sans nom',
-          style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+          style: AppStyles.bodyLargeR(r).copyWith(fontWeight: FontWeight.w600),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (depot.adresse != null) ...[
-              const SizedBox(height: 4),
+              r.verticalSpace(4),
               Row(
                 children: [
-                  const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.location_on_outlined, size: r.iconSize(14), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Expanded(
                     child: Text(
                       depot.adresse!,
-                      style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                      style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -153,59 +160,59 @@ class _DepotListScreenState extends State<DepotListScreen> {
               ),
             ],
             if (depot.magasinNom != null) ...[
-              const SizedBox(height: 4),
+              r.verticalSpace(4),
               Row(
                 children: [
-                  const Icon(Icons.store_outlined, size: 14, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.store_outlined, size: r.iconSize(14), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Text(
                     depot.magasinNom!,
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
             ],
             if (depot.latitude != null && depot.longitude != null) ...[
-              const SizedBox(height: 4),
+              r.verticalSpace(4),
               Row(
                 children: [
-                  const Icon(Icons.gps_fixed, size: 14, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.gps_fixed, size: r.iconSize(14), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Text(
                     '${depot.latitude!.toStringAsFixed(4)}, ${depot.longitude!.toStringAsFixed(4)}',
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
             ],            // Display stock details
-            if (depot.stocks != null && depot.stocks!.isNotEmpty) ...[              const SizedBox(height: 8),
+            if (depot.stocks != null && depot.stocks!.isNotEmpty) ...[              r.verticalSpace(8),
               const Divider(height: 1),
-              const SizedBox(height: 8),
+              r.verticalSpace(8),
               Text(
                 'Stocks (${depot.stocks!.length} produits)',
-                style: AppStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
+                style: AppStyles.bodySmallR(r).copyWith(fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 4),
+              r.verticalSpace(4),
               ...depot.stocks!.take(3).map((stock) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
+                padding: EdgeInsets.symmetric(vertical: r.space(2)),
                 child: Row(
                   children: [
                     Icon(
                       stock.isOutOfStock ? Icons.warning : Icons.inventory_2_outlined,
-                      size: 12,
+                      size: r.iconSize(12),
                       color: stock.isOutOfStock ? AppColors.error : (stock.isLowStock ? Colors.orange : AppColors.success),
                     ),
-                    const SizedBox(width: 4),
+                    SizedBox(width: r.space(4)),
                     Expanded(
                       child: Text(
                         stock.produitNom,
-                        style: AppStyles.bodySmall,
+                        style: AppStyles.bodySmallR(r),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Text(
                       '${stock.quantiteDisponible.toStringAsFixed(0)} unités',
-                      style: AppStyles.bodySmall.copyWith(
+                      style: AppStyles.bodySmallR(r).copyWith(
                         color: stock.isOutOfStock ? AppColors.error : (stock.isLowStock ? Colors.orange : AppColors.textSecondary),
                         fontWeight: FontWeight.w500,
                       ),
@@ -217,10 +224,10 @@ class _DepotListScreenState extends State<DepotListScreen> {
                 InkWell(
                   onTap: () => _showAllStocksDialog(context, depot),
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: EdgeInsets.only(top: r.space(4)),
                     child: Text(
                       '+ ${depot.stocks!.length - 3} autres produits',
-                      style: AppStyles.bodySmall.copyWith(color: AppColors.primary, decoration: TextDecoration.underline),
+                      style: AppStyles.bodySmallR(r).copyWith(color: AppColors.primary, decoration: TextDecoration.underline),
                     ),
                   ),
                 ),
@@ -398,11 +405,12 @@ class _DepotListScreenState extends State<DepotListScreen> {
   }
 
   void _showAllStocksDialog(BuildContext context, Depot depot) {
+    final r = Responsive(context);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(r.radius(20))),
       ),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.7,
@@ -412,37 +420,37 @@ class _DepotListScreenState extends State<DepotListScreen> {
         builder: (context, scrollController) => Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: r.paddingAll(16),
               decoration: BoxDecoration(
                 color: AppColors.primary,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(r.radius(20))),
               ),
               child: Column(
                 children: [
                   Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
+                    width: r.scale(40),
+                    height: r.scale(4),
+                    margin: EdgeInsets.only(bottom: r.space(16)),
                     decoration: BoxDecoration(
                       color: Colors.white54,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(r.radius(2)),
                     ),
                   ),
                   Row(
                     children: [
-                      const Icon(Icons.inventory_2, color: Colors.white),
-                      const SizedBox(width: 12),
+                      Icon(Icons.inventory_2, color: Colors.white, size: r.iconSize(24)),
+                      SizedBox(width: r.space(12)),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'Stocks - ${depot.nom ?? depot.libelleDepot}',
-                              style: AppStyles.headingMedium.copyWith(color: Colors.white),
+                              style: AppStyles.headingMediumR(r).copyWith(color: Colors.white),
                             ),
                             Text(
                               '${depot.stocks?.length ?? 0} produits',
-                              style: AppStyles.bodySmall.copyWith(color: Colors.white70),
+                              style: AppStyles.bodySmallR(r).copyWith(color: Colors.white70),
                             ),
                           ],
                         ),
@@ -458,20 +466,20 @@ class _DepotListScreenState extends State<DepotListScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
-                          Text('Aucun stock', style: AppStyles.bodyLarge.copyWith(color: Colors.grey)),
+                          Icon(Icons.inventory_2_outlined, size: r.iconSize(64), color: Colors.grey[400]),
+                          r.verticalSpace(16),
+                          Text('Aucun stock', style: AppStyles.bodyLargeR(r).copyWith(color: Colors.grey)),
                         ],
                       ),
                     )
                   : ListView.builder(
                       controller: scrollController,
-                      padding: const EdgeInsets.all(16),
+                      padding: r.paddingAll(16),
                       itemCount: depot.stocks!.length,
                       itemBuilder: (context, index) {
                         final stock = depot.stocks![index];
                         return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
+                          margin: EdgeInsets.only(bottom: r.space(8)),
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: stock.isOutOfStock
@@ -490,20 +498,20 @@ class _DepotListScreenState extends State<DepotListScreen> {
                             ),
                             title: Text(
                               stock.produitNom,
-                              style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                              style: AppStyles.bodyMediumR(r).copyWith(fontWeight: FontWeight.w600),
                             ),
                             subtitle: stock.produitCode != null
-                                ? Text('Code: ${stock.produitCode}', style: AppStyles.bodySmall)
+                                ? Text('Code: ${stock.produitCode}', style: AppStyles.bodySmallR(r))
                                 : null,
                             trailing: SizedBox(
-                              width: 70,
+                              width: r.scale(70),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
                                     '${stock.quantiteDisponible.toStringAsFixed(0)}',
-                                    style: AppStyles.bodyLarge.copyWith(
+                                    style: AppStyles.bodyLargeR(r).copyWith(
                                       fontWeight: FontWeight.bold,
                                       color: stock.isOutOfStock
                                           ? AppColors.error
@@ -512,7 +520,7 @@ class _DepotListScreenState extends State<DepotListScreen> {
                                               : AppColors.success,
                                     ),
                                   ),
-                                  Text('unités', style: AppStyles.caption.copyWith(color: Colors.grey)),
+                                  Text('unités', style: AppStyles.captionR(r).copyWith(color: Colors.grey)),
                                 ],
                               ),
                             ),

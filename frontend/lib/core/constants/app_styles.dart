@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
+import 'responsive.dart';
 
 class AppStyles {
-  // Text Styles
+  // ========== TEXT STYLES (statiques, pour compatibilité) ==========
   static TextStyle get headingLarge => GoogleFonts.poppins(
     fontSize: 28,
     fontWeight: FontWeight.bold,
@@ -48,6 +49,56 @@ class AppStyles {
   
   static TextStyle get caption => GoogleFonts.poppins(
     fontSize: 12,
+    fontWeight: FontWeight.w500,
+    color: AppColors.textHint,
+  );
+
+  // ========== TEXT STYLES RESPONSIVES ==========
+  
+  static TextStyle headingLargeR(Responsive r) => GoogleFonts.poppins(
+    fontSize: r.fontSize(28),
+    fontWeight: FontWeight.bold,
+    color: AppColors.textPrimary,
+  );
+
+  static TextStyle headingMediumR(Responsive r) => GoogleFonts.poppins(
+    fontSize: r.fontSize(22),
+    fontWeight: FontWeight.w600,
+    color: AppColors.textPrimary,
+  );
+
+  static TextStyle headingSmallR(Responsive r) => GoogleFonts.poppins(
+    fontSize: r.fontSize(18),
+    fontWeight: FontWeight.w600,
+    color: AppColors.textPrimary,
+  );
+
+  static TextStyle bodyLargeR(Responsive r) => GoogleFonts.poppins(
+    fontSize: r.fontSize(16),
+    fontWeight: FontWeight.normal,
+    color: AppColors.textPrimary,
+  );
+
+  static TextStyle bodyMediumR(Responsive r) => GoogleFonts.poppins(
+    fontSize: r.fontSize(14),
+    fontWeight: FontWeight.normal,
+    color: AppColors.textPrimary,
+  );
+
+  static TextStyle bodySmallR(Responsive r) => GoogleFonts.poppins(
+    fontSize: r.fontSize(12),
+    fontWeight: FontWeight.normal,
+    color: AppColors.textSecondary,
+  );
+
+  static TextStyle buttonTextR(Responsive r) => GoogleFonts.poppins(
+    fontSize: r.fontSize(16),
+    fontWeight: FontWeight.w600,
+    color: AppColors.white,
+  );
+
+  static TextStyle captionR(Responsive r) => GoogleFonts.poppins(
+    fontSize: r.fontSize(12),
     fontWeight: FontWeight.w500,
     color: AppColors.textHint,
   );
@@ -121,6 +172,44 @@ class AppStyles {
         borderSide: const BorderSide(color: AppColors.error, width: 1),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    );
+  }
+
+  // ========== INPUT DECORATION RESPONSIVE ==========
+  
+  static InputDecoration inputDecorationR({
+    required String label,
+    required Responsive r,
+    String? hint,
+    IconData? prefixIcon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      labelStyle: TextStyle(fontSize: r.fontSize(14)),
+      hintStyle: TextStyle(fontSize: r.fontSize(14)),
+      prefixIcon: prefixIcon != null ? Icon(prefixIcon, color: AppColors.textSecondary, size: r.iconSize(22)) : null,
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: AppColors.background,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(r.radius(12)),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(r.radius(12)),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(r.radius(12)),
+        borderSide: const BorderSide(color: AppColors.primary, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(r.radius(12)),
+        borderSide: const BorderSide(color: AppColors.error, width: 1),
+      ),
+      contentPadding: r.paddingSymmetric(horizontal: 16, vertical: 16),
     );
   }
 }

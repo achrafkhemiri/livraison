@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
+import '../../../core/constants/responsive.dart';
 import '../../../providers/providers.dart';
 
 class GerantDashboard extends StatefulWidget {
@@ -38,6 +39,7 @@ class _GerantDashboardState extends State<GerantDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final r = Responsive(context);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -47,20 +49,20 @@ class _GerantDashboardState extends State<GerantDashboard> {
           builder: (context, auth, _) {
             return Row(
               children: [
-                const Icon(Icons.local_shipping_rounded, color: Colors.white),
-                const SizedBox(width: 12),
+                Icon(Icons.local_shipping_rounded, color: Colors.white, size: r.iconSize(24)),
+                SizedBox(width: r.space(12)),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       'Smart Delivery',
-                      style: AppStyles.headingMedium.copyWith(color: Colors.white, fontSize: 18),
+                      style: AppStyles.headingMediumR(r).copyWith(color: Colors.white, fontSize: r.fontSize(18)),
                     ),
                     if (auth.user?.societeNom != null)
                       Text(
                         auth.user!.societeNom!,
-                        style: AppStyles.bodySmall.copyWith(color: Colors.white70, fontSize: 12),
+                        style: AppStyles.bodySmallR(r).copyWith(color: Colors.white70, fontSize: r.fontSize(12)),
                       ),
                   ],
                 ),
@@ -144,49 +146,54 @@ class _GerantDashboardState extends State<GerantDashboard> {
         onRefresh: _loadData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Welcome section
-              _buildWelcomeSection(),
-              const SizedBox(height: 24),
-              
-              // Statistics cards
-              _buildStatisticsSection(),
-              const SizedBox(height: 24),
-              
-              // Quick actions
-              _buildQuickActionsSection(),
-              const SizedBox(height: 24),
-              
-              // Recent orders
-              _buildRecentOrdersSection(),
-            ],
+          padding: r.paddingAll(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: r.maxContentWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Welcome section
+                  _buildWelcomeSection(r),
+                  r.verticalSpace(24),
+                  
+                  // Statistics cards
+                  _buildStatisticsSection(r),
+                  r.verticalSpace(24),
+                  
+                  // Quick actions
+                  _buildQuickActionsSection(r),
+                  r.verticalSpace(24),
+                  
+                  // Recent orders
+                  _buildRecentOrdersSection(),
+                ],
+              ),
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
+      bottomNavigationBar: _buildBottomNav(r),
     );
   }
 
-  Widget _buildWelcomeSection() {
+  Widget _buildWelcomeSection(Responsive r) {
     return Consumer<AuthProvider>(
       builder: (context, auth, _) {
         return Container(
-          padding: const EdgeInsets.all(20),
+          padding: r.paddingAll(20),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [AppColors.primary, AppColors.primaryLight],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(r.radius(16)),
             boxShadow: [
               BoxShadow(
                 color: AppColors.primary.withOpacity(0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                blurRadius: r.scale(10),
+                offset: Offset(0, r.scale(4)),
               ),
             ],
           ),
@@ -198,27 +205,27 @@ class _GerantDashboardState extends State<GerantDashboard> {
                   children: [
                     Text(
                       'Bonjour, ${auth.user?.nom ?? 'Gérant'}',
-                      style: AppStyles.headingMedium.copyWith(color: Colors.white),
+                      style: AppStyles.headingMediumR(r).copyWith(color: Colors.white),
                     ),
-                    const SizedBox(height: 8),
+                    r.verticalSpace(8),
                     Text(
                       'Gérez vos livraisons et optimisez vos trajets',
-                      style: AppStyles.bodyMedium.copyWith(color: Colors.white70),
+                      style: AppStyles.bodyMediumR(r).copyWith(color: Colors.white70),
                     ),
                   ],
                 ),
               ),
               Container(
-                width: 60,
-                height: 60,
+                width: r.avatarSize(60),
+                height: r.avatarSize(60),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.dashboard_rounded,
                   color: Colors.white,
-                  size: 30,
+                  size: r.iconSize(30),
                 ),
               ),
             ],
@@ -228,22 +235,21 @@ class _GerantDashboardState extends State<GerantDashboard> {
     );
   }
 
-  Widget _buildStatisticsSection() {
+  Widget _buildStatisticsSection(Responsive r) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Statistiques', style: AppStyles.headingSmall),
-        const SizedBox(height: 16),
+        Text('Statistiques', style: AppStyles.headingSmallR(r)),
+        r.verticalSpace(16),
         Consumer3<OrderProvider, SocieteProvider, LivreurProvider>(
           builder: (context, orders, societes, livreurs, _) {
             return GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              // reduce aspect ratio so cards get a bit more vertical space
-              childAspectRatio: 1.25,
+              crossAxisCount: r.gridColumns(phoneCols: 2, tabletCols: 4, desktopCols: 4),
+              mainAxisSpacing: r.space(12),
+              crossAxisSpacing: r.space(12),
+              childAspectRatio: r.cardAspectRatio,
               children: [
                 _buildStatCard(
                   'Commandes',
@@ -278,16 +284,17 @@ class _GerantDashboardState extends State<GerantDashboard> {
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    final r = Responsive(context);
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: r.paddingAll(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(r.radius(12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            blurRadius: r.scale(10),
+            offset: Offset(0, r.scale(2)),
           ),
         ],
       ),
@@ -296,14 +303,14 @@ class _GerantDashboardState extends State<GerantDashboard> {
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: r.paddingAll(8),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(r.radius(8)),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: color, size: r.iconSize(20)),
             ),
-            const SizedBox(height: 10),
+            r.verticalSpace(10),
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -311,12 +318,12 @@ class _GerantDashboardState extends State<GerantDashboard> {
                 children: [
                   Text(
                     value,
-                    style: AppStyles.headingMedium.copyWith(color: color),
+                    style: AppStyles.headingMediumR(r).copyWith(color: color),
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     title,
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -326,45 +333,51 @@ class _GerantDashboardState extends State<GerantDashboard> {
     );
   }
 
-  Widget _buildQuickActionsSection() {
+  Widget _buildQuickActionsSection(Responsive r) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Actions rapides', style: AppStyles.headingSmall),
-        const SizedBox(height: 16),
+        Text('Actions rapides', style: AppStyles.headingSmallR(r)),
+        r.verticalSpace(16),
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: r.space(12),
+          runSpacing: r.space(12),
           children: [
             _buildActionButton(
               'Sociétés',
               Icons.business,
               () => Navigator.pushNamed(context, '/gerant/societes'),
+              r,
             ),
             _buildActionButton(
               'Magasins',
               Icons.store,
               () => Navigator.pushNamed(context, '/gerant/magasins'),
+              r,
             ),
             _buildActionButton(
               'Dépôts',
               Icons.warehouse,
               () => Navigator.pushNamed(context, '/gerant/depots'),
+              r,
             ),
             _buildActionButton(
               'Livreurs',
               Icons.delivery_dining,
               () => Navigator.pushNamed(context, '/gerant/livreurs'),
+              r,
             ),
             _buildActionButton(
               'Commandes',
               Icons.shopping_bag,
               () => Navigator.pushNamed(context, '/gerant/orders'),
+              r,
             ),
             _buildActionButton(
               'Carte',
               Icons.map,
               () => Navigator.pushNamed(context, '/gerant/map'),
+              r,
             ),
           ],
         ),
@@ -372,26 +385,27 @@ class _GerantDashboardState extends State<GerantDashboard> {
     );
   }
 
-  Widget _buildActionButton(String label, IconData icon, VoidCallback onTap) {
+  Widget _buildActionButton(String label, IconData icon, VoidCallback onTap, Responsive r) {
+    final size = r.scale(100).clamp(80.0, 140.0);
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(r.radius(12)),
       elevation: 2,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(r.radius(12)),
         child: Container(
-          width: 100,
-          height: 100,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          width: size,
+          height: size,
+          padding: r.paddingSymmetric(vertical: 12, horizontal: 12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: AppColors.primary, size: 28),
-              const SizedBox(height: 8),
+              Icon(icon, color: AppColors.primary, size: r.iconSize(28)),
+              r.verticalSpace(8),
               Text(
                 label,
-                style: AppStyles.bodySmall.copyWith(fontWeight: FontWeight.w500),
+                style: AppStyles.bodySmallR(r).copyWith(fontWeight: FontWeight.w500),
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -404,20 +418,21 @@ class _GerantDashboardState extends State<GerantDashboard> {
   }
 
   Widget _buildRecentOrdersSection() {
+    final r = Responsive(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Commandes récentes', style: AppStyles.headingSmall),
+            Text('Commandes récentes', style: AppStyles.headingSmallR(r)),
             TextButton(
               onPressed: () => Navigator.pushNamed(context, '/gerant/orders'),
-              child: Text('Voir tout', style: AppStyles.bodySmall.copyWith(color: AppColors.primary)),
+              child: Text('Voir tout', style: AppStyles.bodySmallR(r).copyWith(color: AppColors.primary)),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        r.verticalSpace(12),
         Consumer<OrderProvider>(
           builder: (context, orderProvider, _) {
             if (orderProvider.isLoading) {
@@ -464,6 +479,7 @@ class _GerantDashboardState extends State<GerantDashboard> {
   }
 
   Widget _buildOrderCard(order) {
+    final r = Responsive(context);
     Color statusColor;
     String statusText;
     
@@ -494,55 +510,55 @@ class _GerantDashboardState extends State<GerantDashboard> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: r.paddingAll(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(r.radius(12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
+            blurRadius: r.scale(5),
+            offset: Offset(0, r.scale(2)),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: r.scale(48),
+            height: r.scale(48),
             decoration: BoxDecoration(
               color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(r.radius(12)),
             ),
-            child: Icon(Icons.shopping_bag_outlined, color: statusColor),
+            child: Icon(Icons.shopping_bag_outlined, color: statusColor, size: r.iconSize(24)),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: r.space(16)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Commande #${order.id}',
-                  style: AppStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                  style: AppStyles.bodyMediumR(r).copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: r.space(4)),
                 Text(
                   'Client ID: ${order.clientId ?? 'N/A'}',
-                  style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                  style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: r.paddingSymmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(r.radius(20)),
             ),
             child: Text(
               statusText,
-              style: AppStyles.caption.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+              style: AppStyles.captionR(r).copyWith(color: statusColor, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -550,15 +566,15 @@ class _GerantDashboardState extends State<GerantDashboard> {
     );
   }
 
-  Widget _buildBottomNav() {
+  Widget _buildBottomNav(Responsive r) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
+            blurRadius: r.scale(10),
+            offset: Offset(0, r.scale(-2)),
           ),
         ],
       ),
@@ -584,6 +600,9 @@ class _GerantDashboardState extends State<GerantDashboard> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textSecondary,
+        selectedFontSize: r.fontSize(12),
+        unselectedFontSize: r.fontSize(12),
+        iconSize: r.iconSize(24),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.shopping_bag), label: 'Commandes'),

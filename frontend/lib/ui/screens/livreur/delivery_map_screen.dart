@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
+import '../../../core/constants/responsive.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../providers/providers.dart';
@@ -140,15 +141,16 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
+    final r = Responsive(context);
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
-      appBar: _buildModernAppBar(),
+      appBar: _buildModernAppBar(r),
       body: Stack(
         children: [
-          _buildMap(),
-          _buildFloatingControls(),
-          _buildBottomSheet(),
-          if (_isOptimizing) _buildOptimizationOverlay(),
+          _buildMap(r),
+          _buildFloatingControls(r),
+          _buildBottomSheet(r),
+          if (_isOptimizing) _buildOptimizationOverlay(r),
         ],
       ),
     );
@@ -156,7 +158,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== MODERN APP BAR ==================
 
-  PreferredSizeWidget _buildModernAppBar() {
+  PreferredSizeWidget _buildModernAppBar(Responsive r) {
     return AppBar(
       elevation: 0,
       backgroundColor: const Color(0xFF1a237e),
@@ -164,14 +166,14 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(6),
+            padding: EdgeInsets.all(r.space(6)),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(r.radius(10)),
             ),
-            child: const Text('🚚', style: TextStyle(fontSize: 20)),
+            child: Text('🚚', style: TextStyle(fontSize: r.fontSize(20))),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: r.space(10)),
           Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -180,27 +182,27 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 Text(
                   'Smart Delivery',
                   style: GoogleFonts.poppins(
-                    fontSize: 16,
+                    fontSize: r.fontSize(16),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: r.space(2)),
                 Consumer<DeliveryRouteProvider>(
                   builder: (context, provider, _) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: EdgeInsets.symmetric(horizontal: r.space(6), vertical: r.space(2)),
                     decoration: BoxDecoration(
                       color: provider.isOsrmAvailable
                           ? const Color(0xFF00e676).withOpacity(0.2)
                           : Colors.orange.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(r.radius(6)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: 5,
-                          height: 5,
+                          width: r.scale(5),
+                          height: r.scale(5),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: provider.isOsrmAvailable
@@ -208,11 +210,11 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                                 : Colors.orange,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        SizedBox(width: r.space(4)),
                         Text(
                           provider.isOsrmAvailable ? 'OSRM' : 'Hors-ligne',
                           style: GoogleFonts.poppins(
-                            fontSize: 9,
+                            fontSize: r.fontSize(9),
                             color: Colors.white,
                             fontWeight: FontWeight.w500,
                           ),
@@ -229,7 +231,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
       actions: [
         Consumer<LivreurProvider>(
           builder: (context, livreurProvider, _) => IconButton(
-            icon: const Icon(Icons.my_location, color: Colors.white),
+            icon: Icon(Icons.my_location, color: Colors.white, size: r.iconSize(24)),
             tooltip: 'Ma position',
             onPressed: () async {
               final position = await livreurProvider.getCurrentPosition();
@@ -241,18 +243,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.center_focus_strong, color: Colors.white),
+          icon: Icon(Icons.center_focus_strong, color: Colors.white, size: r.iconSize(24)),
           tooltip: 'Tout voir',
           onPressed: _fitAllMarkers,
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: r.space(8)),
       ],
     );
   }
 
   // ================== BOTTOM SHEET ==================
 
-  Widget _buildBottomSheet() {
+  Widget _buildBottomSheet(Responsive r) {
     // On utilise NotificationListener pour tracker le drag manuel
     // et un Key unique pour forcer la recréation du sheet lors du toggle.
     return NotificationListener<DraggableScrollableNotification>(
@@ -289,7 +291,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 ),
                 child: Column(
                   children: [
-                    _buildSheetHandle(),
+                    _buildSheetHandle(r),
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, constraints) {
@@ -299,13 +301,13 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                           }
                           return Column(
                             children: [
-                              _buildModeTabs(),
+                              _buildModeTabs(r),
                               Expanded(
                                 child: TabBarView(
                                   controller: _tabController,
                                   children: [
-                                    _buildCollectContent(routeProvider, orderProvider, scrollController),
-                                    _buildDeliverContent(routeProvider, scrollController),
+                                    _buildCollectContent(routeProvider, orderProvider, scrollController, r),
+                                    _buildDeliverContent(routeProvider, scrollController, r),
                                   ],
                                 ),
                               ),
@@ -324,18 +326,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _buildSheetHandle() {
+  Widget _buildSheetHandle(Responsive r) {
     return Container(
-      padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 8),
+      padding: EdgeInsets.only(top: r.space(8), left: r.space(16), right: r.space(16), bottom: r.space(8)),
       child: Row(
         children: [
           const Spacer(),
           Container(
-            width: 50,
-            height: 5,
+            width: r.scale(50),
+            height: r.scale(5),
             decoration: BoxDecoration(
               color: Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(r.radius(10)),
             ),
           ),
           const Spacer(),
@@ -343,18 +345,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(r.radius(20)),
               onTap: _toggleBottomSheet,
               child: Container(
-                padding: const EdgeInsets.all(6),
+                padding: EdgeInsets.all(r.space(6)),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1a237e).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(r.radius(20)),
                 ),
                 child: Icon(
                   _isSheetExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
                   color: const Color(0xFF1a237e),
-                  size: 20,
+                  size: r.iconSize(20),
                 ),
               ),
             ),
@@ -364,19 +366,19 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _buildModeTabs() {
+  Widget _buildModeTabs(Responsive r) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(4),
+      margin: EdgeInsets.symmetric(horizontal: r.space(16), vertical: r.space(8)),
+      padding: EdgeInsets.all(r.space(4)),
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(r.radius(12)),
       ),
       child: TabBar(
         controller: _tabController,
         indicator: BoxDecoration(
           color: const Color(0xFF1a237e),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(r.radius(10)),
           boxShadow: [
             BoxShadow(
               color: const Color(0xFF1a237e).withOpacity(0.3),
@@ -389,21 +391,21 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         unselectedLabelColor: Colors.grey.shade700,
         labelStyle: GoogleFonts.poppins(
           fontWeight: FontWeight.w600,
-          fontSize: 13,
+          fontSize: r.fontSize(13),
         ),
         unselectedLabelStyle: GoogleFonts.poppins(
           fontWeight: FontWeight.w500,
-          fontSize: 13,
+          fontSize: r.fontSize(13),
         ),
         dividerColor: Colors.transparent,
         tabs: [
           Tab(
-            height: 44,
+            height: r.scale(44),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.inventory_2, size: 18),
-                const SizedBox(width: 6),
+                Icon(Icons.inventory_2, size: r.iconSize(18)),
+                SizedBox(width: r.space(6)),
                 Consumer<DeliveryRouteProvider>(
                   builder: (context, p, _) => Text(
                     'Collecter (${p.collectionStops.where((s) => !s.isCollected).expand((s) => s.orderIds).toSet().length})',
@@ -413,12 +415,12 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             ),
           ),
           Tab(
-            height: 44,
+            height: r.scale(44),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.local_shipping, size: 18),
-                const SizedBox(width: 6),
+                Icon(Icons.local_shipping, size: r.iconSize(18)),
+                SizedBox(width: r.space(6)),
                 Consumer<DeliveryRouteProvider>(
                   builder: (context, p, _) => Text(
                     'Livrer (${p.stops.where((s) => !s.isDelivered).length})',
@@ -434,24 +436,24 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== COLLECT TAB ==================
 
-  Widget _buildCollectContent(DeliveryRouteProvider routeProvider, OrderProvider orderProvider, ScrollController scrollController) {
+  Widget _buildCollectContent(DeliveryRouteProvider routeProvider, OrderProvider orderProvider, ScrollController scrollController, Responsive r) {
     return SingleChildScrollView(
       controller: scrollController,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(r.space(16)),
       child: Column(
         children: [
-          _buildCollectionStopsSection(routeProvider, orderProvider),
-          const SizedBox(height: 16),
-          _buildCollectionOptimizationSection(routeProvider),
+          _buildCollectionStopsSection(routeProvider, orderProvider, r),
+          r.verticalSpace(16),
+          _buildCollectionOptimizationSection(routeProvider, r),
           if (routeProvider.collectionRoutePoints.isNotEmpty)
-            _buildCollectionResultsSection(routeProvider),
-          const SizedBox(height: 20),
+            _buildCollectionResultsSection(routeProvider, r),
+          r.verticalSpace(20),
         ],
       ),
     );
   }
 
-  Widget _buildCollectionStopsSection(DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
+  Widget _buildCollectionStopsSection(DeliveryRouteProvider routeProvider, OrderProvider orderProvider, Responsive r) {
     final stops = routeProvider.collectionStops.where((s) => !s.isCollected).toList();
     
     // All available order IDs (from initial load, not just current plan)
@@ -466,18 +468,19 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
       icon: Icons.warehouse,
       title: 'Dépôts à visiter (${stops.length})',
       color: Colors.orange,
+      r: r,
       child: Column(
         children: [
           if (allAvailableOrderIds.isNotEmpty) ...[
             Row(
               children: [
-                Text('Commandes: $selectedCount/${allAvailableOrderIds.length}', style: AppStyles.caption.copyWith(color: Colors.white70)),
+                Text('Commandes: $selectedCount/${allAvailableOrderIds.length}', style: AppStyles.captionR(r).copyWith(color: Colors.white70)),
                 const Spacer(),
                 _miniTextButton(
                   icon: Icons.check_box,
                   label: 'Tout',
+                  r: r,
                   onPressed: () {
-                    // Select all available orders, not just those in current plan
                     for (final oid in allAvailableOrderIds) {
                       if (!routeProvider.selectedCollectionIds.contains(oid)) {
                         routeProvider.toggleCollectionSelection(oid);
@@ -488,22 +491,23 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 _miniTextButton(
                   icon: Icons.check_box_outline_blank,
                   label: 'Aucun',
+                  r: r,
                   onPressed: () => routeProvider.deselectAllCollectionStops(),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            // Order filter chips — show ALL available orders
+            SizedBox(height: r.space(4)),
+            // Order filter chips
             Wrap(
-              spacing: 6,
-              runSpacing: 6,
+              spacing: r.space(6),
+              runSpacing: r.space(6),
               children: allAvailableOrderIds.map((oid) {
                 final selected = routeProvider.selectedCollectionIds.contains(oid);
                 return FilterChip(
                   label: Text(
                     'CMD #$oid',
                     style: GoogleFonts.poppins(
-                      fontSize: 11,
+                      fontSize: r.fontSize(11),
                       fontWeight: FontWeight.w500,
                       color: selected ? Colors.white : const Color(0xFF1a237e),
                     ),
@@ -515,7 +519,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                   checkmarkColor: Colors.white,
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: EdgeInsets.symmetric(horizontal: r.space(8), vertical: r.space(4)),
                   side: BorderSide(
                     color: selected ? Colors.orange.shade600 : Colors.grey.shade300,
                     width: 1.5,
@@ -523,35 +527,34 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 );
               }).toList(),
             ),
-            const SizedBox(height: 12),
-            // "Recalculate" button — shown when selection changed
+            SizedBox(height: r.space(12)),
             if (needsRecompute)
               Container(
                 width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 8),
+                margin: EdgeInsets.only(bottom: r.space(8)),
                 child: ElevatedButton.icon(
                   onPressed: routeProvider.isLoading ? null : () => _recomputePlan(routeProvider),
                   icon: routeProvider.isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      ? SizedBox(
+                          width: r.scale(18),
+                          height: r.scale(18),
+                          child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Icon(Icons.refresh, size: 20),
+                      : Icon(Icons.refresh, size: r.iconSize(20)),
                   label: Text(
                     routeProvider.isLoading
                         ? 'Calcul en cours...'
                         : 'Recalculer le plan (${routeProvider.selectedCollectionIds.length} cmd)',
                     style: GoogleFonts.poppins(
-                      fontSize: 13,
+                      fontSize: r.fontSize(13),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange.shade600,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: EdgeInsets.symmetric(vertical: r.space(14), horizontal: r.space(16)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(12))),
                     elevation: 0,
                   ),
                 ),
@@ -559,31 +562,31 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           ],
           if (stops.isEmpty && !needsRecompute)
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(r.space(24)),
               child: Column(
                 children: [
                   Icon(
                     Icons.check_circle_outline,
-                    size: 48,
+                    size: r.iconSize(48),
                     color: Colors.grey.shade400,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: r.space(12)),
                   Text(
                     selectedCount == 0
                         ? 'Sélectionnez des commandes puis recalculez'
                         : 'Rien à collecter',
                     style: GoogleFonts.poppins(
-                      fontSize: 14,
+                      fontSize: r.fontSize(14),
                       color: Colors.grey.shade700,
                       fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: r.space(6)),
                   Text(
                     'Les commandes collectées sont\ndans "À livrer"',
                     style: GoogleFonts.poppins(
-                      fontSize: 12,
+                      fontSize: r.fontSize(12),
                       color: Colors.grey.shade500,
                     ),
                     textAlign: TextAlign.center,
@@ -593,7 +596,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             )
           else if (!needsRecompute)
             ...stops.asMap().entries.map((entry) => _buildMergedDepotItem(
-              entry.key, entry.value, routeProvider, orderProvider,
+              entry.key, entry.value, routeProvider, orderProvider, r,
             )),
         ],
       ),
@@ -610,14 +613,14 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _buildMergedDepotItem(int index, CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
+  Widget _buildMergedDepotItem(int index, CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider, Responsive r) {
     final isSelected = stop.orderIds.any((oid) => routeProvider.selectedCollectionIds.contains(oid));
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: EdgeInsets.only(bottom: r.space(10)),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(r.radius(14)),
         border: Border.all(
           color: isSelected ? Colors.orange.shade400 : Colors.grey.shade200,
           width: isSelected ? 2 : 1,
@@ -636,14 +639,14 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _showCollectionStopDetails(stop),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(r.radius(14)),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(r.space(14)),
             child: Row(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: r.scale(40),
+                  height: r.scale(40),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -666,12 +669,12 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                       style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: r.fontSize(16),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: r.space(14)),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -679,28 +682,28 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                       Text(
                         stop.depotName,
                         style: GoogleFonts.poppins(
-                          fontSize: 14,
+                          fontSize: r.fontSize(14),
                           fontWeight: FontWeight.w600,
                           color: const Color(0xFF1a237e),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: r.space(4)),
                       Text(
                         'CMD ${stop.orderIds.map((id) => '#$id').join(', ')}',
                         style: GoogleFonts.poppins(
-                          fontSize: 11,
+                          fontSize: r.fontSize(11),
                           color: Colors.orange.shade600,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                       ...stop.items.map((item) => Padding(
-                        padding: const EdgeInsets.only(top: 2),
+                        padding: EdgeInsets.only(top: r.space(2)),
                         child: Text(
                           '${item.name} x${item.quantity} (CMD #${item.orderId})',
                           style: GoogleFonts.poppins(
-                            fontSize: 10,
+                            fontSize: r.fontSize(10),
                             color: Colors.grey.shade600,
                           ),
                         ),
@@ -708,8 +711,8 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                _collectButton(stop, routeProvider, orderProvider),
+                SizedBox(width: r.space(8)),
+                _collectButton(stop, routeProvider, orderProvider, r),
               ],
             ),
           ),
@@ -718,33 +721,34 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _collectButton(CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider) {
+  Widget _collectButton(CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider, Responsive r) {
     return ElevatedButton.icon(
       onPressed: () => _markCollected(stop, routeProvider, orderProvider),
-      icon: const Icon(Icons.check, size: 16),
+      icon: Icon(Icons.check, size: r.iconSize(16)),
       label: Text(
         'Collecté',
         style: GoogleFonts.poppins(
-          fontSize: 12,
+          fontSize: r.fontSize(12),
           fontWeight: FontWeight.w600,
         ),
       ),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF00c853),
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: EdgeInsets.symmetric(horizontal: r.space(12), vertical: r.space(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
         elevation: 0,
       ),
     );
   }
 
-  Widget _buildCollectionOptimizationSection(DeliveryRouteProvider provider) {
+  Widget _buildCollectionOptimizationSection(DeliveryRouteProvider provider, Responsive r) {
     final selectedStops = provider.selectedCollectionStops.where((s) => !s.isCollected).toList();
     return _buildSection(
       icon: Icons.route,
       title: 'Optimisation collecte',
       color: Colors.orange,
+      r: r,
       child: Column(
         children: [
           _buildButton(
@@ -753,20 +757,21 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             onPressed: selectedStops.isEmpty ? null : _optimizeCollectionRoute,
             isPrimary: true,
             color: Colors.orange.shade600,
+            r: r,
           ),
           if (selectedStops.isEmpty && provider.collectionStops.any((s) => !s.isCollected))
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: EdgeInsets.only(top: r.space(12)),
               child: Text(
                 'Sélectionnez au moins un dépôt',
                 style: GoogleFonts.poppins(
-                  fontSize: 12,
+                  fontSize: r.fontSize(12),
                   color: Colors.orange.shade600,
                 ),
                 textAlign: TextAlign.center,
               ),
             ),
-          const SizedBox(height: 10),
+          SizedBox(height: r.space(10)),
           _buildButton(
             icon: Icons.delete_sweep,
             label: 'Effacer la route',
@@ -775,17 +780,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             },
             isPrimary: false,
             isDanger: true,
+            r: r,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCollectionResultsSection(DeliveryRouteProvider provider) {
+  Widget _buildCollectionResultsSection(DeliveryRouteProvider provider, Responsive r) {
     final stops = provider.selectedCollectionStops.where((s) => !s.isCollected).toList();
     return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(18),
+      margin: EdgeInsets.only(top: r.space(16)),
+      padding: EdgeInsets.all(r.space(18)),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -793,7 +799,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             Colors.orange.shade400,
           ],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(r.radius(16)),
         boxShadow: [
           BoxShadow(
             color: Colors.orange.withOpacity(0.3),
@@ -807,50 +813,51 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         children: [
           Row(
             children: [
-              const Text('📦', style: TextStyle(fontSize: 24)),
-              const SizedBox(width: 10),
+              Text('📦', style: TextStyle(fontSize: r.fontSize(24))),
+              SizedBox(width: r.space(10)),
               Text(
                 'Route de collecte',
                 style: GoogleFonts.poppins(
-                  fontSize: 16,
+                  fontSize: r.fontSize(16),
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _buildResultRow('Distance', provider.formattedCollectionDistance),
-          _buildResultRow('Temps estimé', provider.formattedCollectionDuration),
-          _buildResultRow('Dépôts', '${stops.length}'),
+          SizedBox(height: r.space(16)),
+          _buildResultRow('Distance', provider.formattedCollectionDistance, r),
+          _buildResultRow('Temps estimé', provider.formattedCollectionDuration, r),
+          _buildResultRow('Dépôts', '${stops.length}', r),
           _buildResultRow(
             'Routing',
             provider.usedOsrmGeometryCollection
                 ? 'OSRM ✓'
                 : (provider.isOsrmAvailable ? 'Fallback' : 'Haversine'),
+            r,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: r.space(16)),
           Text(
             'Ordre des dépôts:',
             style: GoogleFonts.poppins(
-              fontSize: 12,
+              fontSize: r.fontSize(12),
               color: Colors.white.withOpacity(0.9),
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: r.space(10)),
           ...stops.asMap().entries.map((e) => Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            padding: const EdgeInsets.all(10),
+            margin: EdgeInsets.only(bottom: r.space(6)),
+            padding: EdgeInsets.all(r.space(10)),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(r.radius(10)),
             ),
             child: Row(
               children: [
                 Container(
-                  width: 26,
-                  height: 26,
+                  width: r.scale(26),
+                  height: r.scale(26),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
@@ -861,17 +868,17 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                       style: GoogleFonts.poppins(
                         color: Colors.orange.shade700,
                         fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontSize: r.fontSize(12),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: r.space(10)),
                 Expanded(
                   child: Text(
                     e.value.depotName,
                     style: GoogleFonts.poppins(
-                      fontSize: 12,
+                      fontSize: r.fontSize(12),
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
                     ),
@@ -881,7 +888,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 Text(
                   'CMD ${e.value.orderIds.map((id) => '#$id').join(', ')}',
                   style: GoogleFonts.poppins(
-                    fontSize: 11,
+                    fontSize: r.fontSize(11),
                     color: Colors.white.withOpacity(0.8),
                   ),
                 ),
@@ -895,18 +902,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== DELIVER TAB ==================
 
-  Widget _buildDeliverContent(DeliveryRouteProvider routeProvider, ScrollController scrollController) {
+  Widget _buildDeliverContent(DeliveryRouteProvider routeProvider, ScrollController scrollController, Responsive r) {
     return SingleChildScrollView(
       controller: scrollController,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(r.space(16)),
       child: Column(
         children: [
-          _buildStopsSection(routeProvider),
-          const SizedBox(height: 16),
-          _buildOptimizationSection(routeProvider),
+          _buildStopsSection(routeProvider, r),
+          r.verticalSpace(16),
+          _buildOptimizationSection(routeProvider, r),
           if (routeProvider.routePoints.isNotEmpty)
-            _buildResultsSection(routeProvider),
-          const SizedBox(height: 20),
+            _buildResultsSection(routeProvider, r),
+          r.verticalSpace(20),
         ],
       ),
     );
@@ -914,11 +921,12 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== SHARED WIDGETS ==================
 
-  Widget _buildStopsSection(DeliveryRouteProvider provider) {
+  Widget _buildStopsSection(DeliveryRouteProvider provider, Responsive r) {
     final selectedCount = provider.selectedStopIds.length;
     return _buildSection(
       icon: Icons.location_on,
       title: 'Clients (${provider.stops.length})',
+      r: r,
       child: Column(
         children: [
           if (provider.stops.isNotEmpty) ...[
@@ -927,7 +935,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 Text(
                   'Sélectionnés: $selectedCount',
                   style: GoogleFonts.poppins(
-                    fontSize: 12,
+                    fontSize: r.fontSize(12),
                     color: Colors.grey.shade600,
                   ),
                 ),
@@ -935,42 +943,44 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 _miniTextButton(
                   icon: Icons.check_box,
                   label: 'Tout',
+                  r: r,
                   onPressed: () => provider.selectAllStops(),
                 ),
                 _miniTextButton(
                   icon: Icons.check_box_outline_blank,
                   label: 'Aucun',
+                  r: r,
                   onPressed: () => provider.deselectAllStops(),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: r.space(12)),
           ],
           if (provider.stops.isEmpty)
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(r.space(24)),
               child: Column(
                 children: [
                   Icon(
                     Icons.inbox_outlined,
-                    size: 48,
+                    size: r.iconSize(48),
                     color: Colors.grey.shade400,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: r.space(12)),
                   Text(
                     'Aucune livraison',
                     style: GoogleFonts.poppins(
-                      fontSize: 14,
+                      fontSize: r.fontSize(14),
                       color: Colors.grey.shade700,
                       fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: r.space(6)),
                   Text(
                     'Collectez d\'abord les articles\ndans l\'onglet "Collecter"',
                     style: GoogleFonts.poppins(
-                      fontSize: 12,
+                      fontSize: r.fontSize(12),
                       color: Colors.grey.shade500,
                     ),
                     textAlign: TextAlign.center,
@@ -980,22 +990,22 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             )
           else
             ...provider.stops.asMap().entries.map(
-              (entry) => _buildStopItem(entry.key, entry.value, provider),
+              (entry) => _buildStopItem(entry.key, entry.value, provider, r),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildStopItem(int index, DeliveryStop stop, DeliveryRouteProvider provider) {
+  Widget _buildStopItem(int index, DeliveryStop stop, DeliveryRouteProvider provider, Responsive r) {
     final isDelivered = stop.isDelivered;
     final isSelected = provider.isStopSelected(stop.id);
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: EdgeInsets.only(bottom: r.space(10)),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(r.radius(14)),
         border: Border.all(
           color: isDelivered
               ? const Color(0xFF00c853)
@@ -1024,9 +1034,9 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             _mapController.move(stop.position, 15);
             _showStopDetails(stop);
           },
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(r.radius(14)),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(r.space(14)),
             child: Row(
               children: [
                 Checkbox(
@@ -1043,8 +1053,8 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: r.scale(40),
+                  height: r.scale(40),
                   decoration: BoxDecoration(
                     gradient: isDelivered
                         ? const LinearGradient(
@@ -1072,18 +1082,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                   ),
                   child: Center(
                     child: isDelivered
-                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        ? Icon(Icons.check, color: Colors.white, size: r.iconSize(20))
                         : Text(
                             '${index + 1}',
                             style: GoogleFonts.poppins(
                               color: isSelected ? Colors.white : Colors.grey.shade700,
                               fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                              fontSize: r.fontSize(16),
                             ),
                           ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: r.space(14)),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1091,18 +1101,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                       Text(
                         stop.name,
                         style: GoogleFonts.poppins(
-                          fontSize: 14,
+                          fontSize: r.fontSize(14),
                           fontWeight: FontWeight.w600,
                           color: const Color(0xFF1a237e),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: r.space(4)),
                       Text(
                         'CMD #${stop.order.id}',
                         style: GoogleFonts.poppins(
-                          fontSize: 11,
+                          fontSize: r.fontSize(11),
                           color: Colors.grey.shade600,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1115,12 +1125,12 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                     icon: Icon(
                       Icons.check_circle,
                       color: const Color(0xFF00c853),
-                      size: 28,
+                      size: r.iconSize(28),
                     ),
                     onPressed: () => _markDelivered(stop),
                     tooltip: 'Marquer livré',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                    constraints: BoxConstraints(minWidth: r.scale(40), minHeight: r.scale(40)),
                   ),
               ],
             ),
@@ -1130,10 +1140,11 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _buildOptimizationSection(DeliveryRouteProvider provider) {
+  Widget _buildOptimizationSection(DeliveryRouteProvider provider, Responsive r) {
     return _buildSection(
       icon: Icons.route,
       title: 'Optimisation livraison',
+      r: r,
       child: Column(
         children: [
           _buildButton(
@@ -1141,41 +1152,43 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             label: 'Calculer le trajet optimal',
             onPressed: provider.selectedStops.isEmpty ? null : _optimizeRoute,
             isPrimary: true,
+            r: r,
           ),
           if (provider.selectedStops.isEmpty && provider.stops.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: EdgeInsets.only(top: r.space(12)),
               child: Text(
                 'Sélectionnez au moins un client',
                 style: GoogleFonts.poppins(
-                  fontSize: 12,
+                  fontSize: r.fontSize(12),
                   color: Colors.orange.shade600,
                 ),
                 textAlign: TextAlign.center,
               ),
             ),
-          const SizedBox(height: 10),
+          SizedBox(height: r.space(10)),
           _buildButton(
             icon: Icons.delete_sweep,
             label: 'Effacer la route',
             onPressed: provider.routePoints.isEmpty ? null : () => provider.clearRoutePath(),
             isPrimary: false,
             isDanger: true,
+            r: r,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildResultsSection(DeliveryRouteProvider provider) {
+  Widget _buildResultsSection(DeliveryRouteProvider provider, Responsive r) {
     return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(18),
+      margin: EdgeInsets.only(top: r.space(16)),
+      padding: EdgeInsets.all(r.space(18)),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF1a237e), Color(0xFF3949AB)],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(r.radius(16)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF1a237e).withOpacity(0.3),
@@ -1189,54 +1202,56 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         children: [
           Row(
             children: [
-              const Text('📦', style: TextStyle(fontSize: 24)),
-              const SizedBox(width: 10),
+              Text('📦', style: TextStyle(fontSize: r.fontSize(24))),
+              SizedBox(width: r.space(10)),
               Text(
                 'Route de livraison',
                 style: GoogleFonts.poppins(
-                  fontSize: 16,
+                  fontSize: r.fontSize(16),
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _buildResultRow('Distance', provider.formattedDistance),
-          _buildResultRow('Temps estimé', provider.formattedDuration),
-          _buildResultRow('Arrêts', '${provider.stops.length}'),
+          SizedBox(height: r.space(16)),
+          _buildResultRow('Distance', provider.formattedDistance, r),
+          _buildResultRow('Temps estimé', provider.formattedDuration, r),
+          _buildResultRow('Arrêts', '${provider.stops.length}', r),
           _buildResultRow(
             'Livrées',
             '${provider.stops.where((s) => s.isDelivered).length}',
+            r,
           ),
           _buildResultRow(
             'Routing',
             provider.usedOsrmGeometry
                 ? 'OSRM ✓'
                 : (provider.isOsrmAvailable ? 'Fallback' : 'Haversine'),
+            r,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: r.space(16)),
           Text(
             'Ordre des stops:',
             style: GoogleFonts.poppins(
-              fontSize: 12,
+              fontSize: r.fontSize(12),
               color: Colors.white.withOpacity(0.9),
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: r.space(10)),
           ...provider.stops.asMap().entries.map((e) => Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            padding: const EdgeInsets.all(10),
+            margin: EdgeInsets.only(bottom: r.space(6)),
+            padding: EdgeInsets.all(r.space(10)),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(r.radius(10)),
             ),
             child: Row(
               children: [
                 Container(
-                  width: 26,
-                  height: 26,
+                  width: r.scale(26),
+                  height: r.scale(26),
                   decoration: BoxDecoration(
                     color: e.value.isDelivered
                         ? const Color(0xFF00c853)
@@ -1245,23 +1260,23 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                   ),
                   child: Center(
                     child: e.value.isDelivered
-                        ? const Icon(Icons.check, color: Colors.white, size: 14)
+                        ? Icon(Icons.check, color: Colors.white, size: r.iconSize(14))
                         : Text(
                             '${e.key + 1}',
                             style: GoogleFonts.poppins(
                               color: const Color(0xFF1a237e),
                               fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                              fontSize: r.fontSize(12),
                             ),
                           ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: r.space(10)),
                 Expanded(
                   child: Text(
                     e.value.name,
                     style: GoogleFonts.poppins(
-                      fontSize: 12,
+                      fontSize: r.fontSize(12),
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1270,15 +1285,15 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 ),
                 if (e.value.isDelivered)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: EdgeInsets.symmetric(horizontal: r.space(8), vertical: r.space(4)),
                     decoration: BoxDecoration(
                       color: const Color(0xFF00c853),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(r.radius(8)),
                     ),
                     child: Text(
                       'Livré',
                       style: GoogleFonts.poppins(
-                        fontSize: 10,
+                        fontSize: r.fontSize(10),
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1294,7 +1309,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== MAP ==================
 
-  Widget _buildMap() {
+  Widget _buildMap(Responsive r) {
     return Consumer3<DeliveryRouteProvider, LivreurProvider, OrderProvider>(
       builder: (context, routeProvider, livreurProvider, orderProvider, _) {
         final isCollectMode = routeProvider.mapMode == MapMode.collect;
@@ -1493,10 +1508,10 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== FLOATING CONTROLS ==================
 
-  Widget _buildFloatingControls() {
+  Widget _buildFloatingControls(Responsive r) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(r.space(16)),
         child: Column(
           children: [
             const Spacer(),
@@ -1509,24 +1524,27 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                     _buildFloatingButton(
                       icon: Icons.add,
                       tooltip: 'Zoom +',
+                      r: r,
                       onPressed: () {
                         final zoom = _mapController.camera.zoom;
                         _mapController.move(_mapController.camera.center, zoom + 1);
                       },
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: r.space(8)),
                     _buildFloatingButton(
                       icon: Icons.remove,
                       tooltip: 'Zoom -',
+                      r: r,
                       onPressed: () {
                         final zoom = _mapController.camera.zoom;
                         _mapController.move(_mapController.camera.center, zoom - 1);
                       },
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: r.space(8)),
                     _buildFloatingButton(
                       icon: Icons.zoom_out_map,
                       tooltip: 'Tout voir',
+                      r: r,
                       onPressed: _fitAllMarkers,
                       backgroundColor: const Color(0xFF1a237e),
                       iconColor: Colors.white,
@@ -1535,7 +1553,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: r.space(20)),
           ],
         ),
       ),
@@ -1546,13 +1564,14 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
+    required Responsive r,
     Color? backgroundColor,
     Color? iconColor,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: backgroundColor ?? Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(r.radius(12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.15),
@@ -1564,14 +1583,14 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(r.radius(12)),
           onTap: onPressed,
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(r.space(12)),
             child: Icon(
               icon,
               color: iconColor ?? const Color(0xFF1a237e),
-              size: 24,
+              size: r.iconSize(24),
             ),
           ),
         ),
@@ -1579,44 +1598,44 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _buildOptimizationOverlay() {
+  Widget _buildOptimizationOverlay(Responsive r) {
     return Container(
       color: const Color(0xFF1a237e).withOpacity(0.9),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: 60, height: 60,
-              child: CircularProgressIndicator(strokeWidth: 4, valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00e676))),
+            SizedBox(
+              width: r.scale(60), height: r.scale(60),
+              child: const CircularProgressIndicator(strokeWidth: 4, valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00e676))),
             ),
-            const SizedBox(height: 24),
-            Text(_optimizationStatus.isNotEmpty ? _optimizationStatus : 'Calcul en cours...', style: AppStyles.bodyLarge.copyWith(color: Colors.white)),
-            const SizedBox(height: 12),
+            SizedBox(height: r.space(24)),
+            Text(_optimizationStatus.isNotEmpty ? _optimizationStatus : 'Calcul en cours...', style: AppStyles.bodyLargeR(r).copyWith(color: Colors.white)),
+            SizedBox(height: r.space(12)),
             Consumer<DeliveryRouteProvider>(
               builder: (context, provider, _) {
                 return Text(
                   provider.isOsrmAvailable ? 'Via OSRM (routes réelles)' : 'Via Haversine (estimation)',
-                  style: AppStyles.bodySmall.copyWith(color: Colors.white70),
+                  style: AppStyles.bodySmallR(r).copyWith(color: Colors.white70),
                 );
               },
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: r.space(20)),
             SizedBox(
-              width: 280,
+              width: r.scale(280),
               child: Column(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(r.radius(4)),
                     child: LinearProgressIndicator(
                       value: _optimizationProgress,
                       backgroundColor: Colors.white.withOpacity(0.2),
                       valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF00e676)),
-                      minHeight: 6,
+                      minHeight: r.scale(6),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text('${(_optimizationProgress * 100).toInt()}%', style: AppStyles.caption.copyWith(color: Colors.white70)),
+                  SizedBox(height: r.space(8)),
+                  Text('${(_optimizationProgress * 100).toInt()}%', style: AppStyles.captionR(r).copyWith(color: Colors.white70)),
                 ],
               ),
             ),
@@ -1628,12 +1647,12 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
 
   // ================== REUSABLE WIDGETS ==================
 
-  Widget _buildSection({required IconData icon, required String title, required Widget child, Color? color}) {
+  Widget _buildSection({required IconData icon, required String title, required Widget child, required Responsive r, Color? color}) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(r.space(16)),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(r.radius(16)),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),
@@ -1648,19 +1667,19 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(r.space(8)),
                 decoration: BoxDecoration(
                   color: (color ?? const Color(0xFF1a237e)).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(r.radius(10)),
                 ),
-                child: Icon(icon, color: color ?? const Color(0xFF1a237e), size: 20),
+                child: Icon(icon, color: color ?? const Color(0xFF1a237e), size: r.iconSize(20)),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: r.space(12)),
               Expanded(
                 child: Text(
                   title,
                   style: GoogleFonts.poppins(
-                    fontSize: 16,
+                    fontSize: r.fontSize(16),
                     fontWeight: FontWeight.w600,
                     color: const Color(0xFF1a237e),
                   ),
@@ -1668,23 +1687,23 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: r.space(16)),
           child,
         ],
       ),
     );
   }
 
-  Widget _buildInfoField(String label, String value) {
+  Widget _buildInfoField(String label, String value, Responsive r) {
     return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(8)),
+      padding: EdgeInsets.all(r.space(10)),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(r.radius(8))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppStyles.caption.copyWith(color: Colors.grey[600])),
-          const SizedBox(height: 2),
-          Text(value, style: AppStyles.bodySmall.copyWith(fontWeight: FontWeight.w500)),
+          Text(label, style: AppStyles.captionR(r).copyWith(color: Colors.grey[600])),
+          SizedBox(height: r.space(2)),
+          Text(value, style: AppStyles.bodySmallR(r).copyWith(fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -1693,6 +1712,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   Widget _buildButton({
     required IconData icon,
     required String label,
+    required Responsive r,
     VoidCallback? onPressed,
     bool isPrimary = false,
     bool isDanger = false,
@@ -1713,19 +1733,19 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
       width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: onPressed,
-        icon: Icon(icon, size: 20),
+        icon: Icon(icon, size: r.iconSize(20)),
         label: Text(
           label,
           style: GoogleFonts.poppins(
-            fontSize: 14,
+            fontSize: r.fontSize(14),
             fontWeight: FontWeight.w600,
           ),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: bgColor,
           foregroundColor: isPrimary || isDanger ? Colors.white : Colors.grey.shade700,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: EdgeInsets.symmetric(vertical: r.space(14)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(12))),
           elevation: 0,
           shadowColor: Colors.transparent,
         ),
@@ -1733,23 +1753,23 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _buildResultRow(String label, String value) {
+  Widget _buildResultRow(String label, String value, Responsive r) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: EdgeInsets.symmetric(vertical: r.space(6)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
             style: GoogleFonts.poppins(
-              fontSize: 13,
+              fontSize: r.fontSize(13),
               color: Colors.white.withOpacity(0.9),
             ),
           ),
           Text(
             value,
             style: GoogleFonts.poppins(
-              fontSize: 13,
+              fontSize: r.fontSize(13),
               color: Colors.white,
               fontWeight: FontWeight.bold,
             ),
@@ -1759,20 +1779,20 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _miniTextButton({required IconData icon, required String label, required VoidCallback onPressed}) {
+  Widget _miniTextButton({required IconData icon, required String label, required VoidCallback onPressed, required Responsive r}) {
     return TextButton.icon(
       onPressed: onPressed,
-      icon: Icon(icon, color: const Color(0xFF1a237e), size: 16),
+      icon: Icon(icon, color: const Color(0xFF1a237e), size: r.iconSize(16)),
       label: Text(
         label,
         style: GoogleFonts.poppins(
-          fontSize: 12,
+          fontSize: r.fontSize(12),
           color: const Color(0xFF1a237e),
           fontWeight: FontWeight.w500,
         ),
       ),
       style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: EdgeInsets.symmetric(horizontal: r.space(8)),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
@@ -2163,15 +2183,15 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
+  Widget _buildDetailRow(IconData icon, String label, String value, {Responsive? r}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: r?.space(8) ?? 8),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: AppColors.textSecondary),
-          const SizedBox(width: 12),
-          Text('$label: ', style: AppStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
-          Expanded(child: Text(value, style: AppStyles.bodyMedium)),
+          Icon(icon, size: r?.iconSize(20) ?? 20, color: AppColors.textSecondary),
+          SizedBox(width: r?.space(12) ?? 12),
+          Text('$label: ', style: r != null ? AppStyles.bodyMediumR(r).copyWith(color: AppColors.textSecondary) : AppStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+          Expanded(child: Text(value, style: r != null ? AppStyles.bodyMediumR(r) : AppStyles.bodyMedium)),
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
+import '../../../core/constants/responsive.dart';
 import '../../../providers/providers.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -84,6 +85,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final r = Responsive(context);
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -99,164 +101,172 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: r.paddingAll(24),
               child: FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: Card(
-                    elevation: 8,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Logo / Icon
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.local_shipping_rounded,
-                                size: 40,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            
-                            // Title
-                            Text(
-                              'Smart Delivery',
-                              style: AppStyles.headingLarge.copyWith(
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Connectez-vous à votre compte',
-                              style: AppStyles.bodyMedium.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 32),
-                            
-                            // Username field
-                            TextFormField(
-                              controller: _usernameController,
-                              decoration: AppStyles.inputDecoration(
-                                label: 'Nom d\'utilisateur',
-                                hint: 'Entrez votre nom d\'utilisateur',
-                                prefixIcon: Icons.person_outline,
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Veuillez entrer votre nom d\'utilisateur';
-                                }
-                                return null;
-                              },
-                              textInputAction: TextInputAction.next,
-                            ),
-                            const SizedBox(height: 16),
-                            
-                            // Password field
-                            TextFormField(
-                              controller: _passwordController,
-                              obscureText: _obscurePassword,
-                              decoration: AppStyles.inputDecoration(
-                                label: 'Mot de passe',
-                                hint: 'Entrez votre mot de passe',
-                                prefixIcon: Icons.lock_outline,
-                              ).copyWith(
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _obscurePassword
-                                        ? Icons.visibility_off_outlined
-                                        : Icons.visibility_outlined,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscurePassword = !_obscurePassword;
-                                    });
-                                  },
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: r.maxContentWidth),
+                    child: Card(
+                      elevation: 8,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(r.radius(20)),
+                      ),
+                      child: Padding(
+                        padding: r.paddingAll(32),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Logo / Icon
+                              Container(
+                                width: r.avatarSize(80),
+                                height: r.avatarSize(80),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(0.1),
+                                  shape: BoxShape.circle,
                                 ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Veuillez entrer votre mot de passe';
-                                }
-                                return null;
-                              },
-                              textInputAction: TextInputAction.done,
-                              onFieldSubmitted: (_) => _handleLogin(),
-                            ),
-                            const SizedBox(height: 24),
-                            
-                            // Login button
-                            Consumer<AuthProvider>(
-                              builder: (context, auth, _) {
-                                return SizedBox(
-                                  width: double.infinity,
-                                  height: 50,
-                                  child: ElevatedButton(
-                                    onPressed: auth.isLoading ? null : _handleLogin,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.primary,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      elevation: 2,
-                                    ),
-                                    child: auth.isLoading
-                                        ? const SizedBox(
-                                            width: 24,
-                                            height: 24,
-                                            child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : Text(
-                                            'Se connecter',
-                                            style: AppStyles.bodyLarge.copyWith(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                  ),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            
-                            // Forgot password
-                            TextButton(
-                              onPressed: () {
-                                // TODO: Implement forgot password
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Contactez l\'administrateur pour réinitialiser votre mot de passe'),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              },
-                              child: Text(
-                                'Mot de passe oublié ?',
-                                style: AppStyles.bodySmall.copyWith(
+                                child: Icon(
+                                  Icons.local_shipping_rounded,
+                                  size: r.iconSize(40),
                                   color: AppColors.primary,
                                 ),
                               ),
-                            ),
-                          ],
+                              r.verticalSpace(24),
+                              
+                              // Title
+                              Text(
+                                'Smart Delivery',
+                                style: AppStyles.headingLargeR(r).copyWith(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              r.verticalSpace(8),
+                              Text(
+                                'Connectez-vous à votre compte',
+                                style: AppStyles.bodyMediumR(r).copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              r.verticalSpace(32),
+                              
+                              // Username field
+                              TextFormField(
+                                controller: _usernameController,
+                                style: TextStyle(fontSize: r.fontSize(14)),
+                                decoration: AppStyles.inputDecorationR(
+                                  label: 'Nom d\'utilisateur',
+                                  hint: 'Entrez votre nom d\'utilisateur',
+                                  prefixIcon: Icons.person_outline,
+                                  r: r,
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Veuillez entrer votre nom d\'utilisateur';
+                                  }
+                                  return null;
+                                },
+                                textInputAction: TextInputAction.next,
+                              ),
+                              r.verticalSpace(16),
+                              
+                              // Password field
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: _obscurePassword,
+                                style: TextStyle(fontSize: r.fontSize(14)),
+                                decoration: AppStyles.inputDecorationR(
+                                  label: 'Mot de passe',
+                                  hint: 'Entrez votre mot de passe',
+                                  prefixIcon: Icons.lock_outline,
+                                  r: r,
+                                ).copyWith(
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: AppColors.textSecondary,
+                                      size: r.iconSize(22),
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Veuillez entrer votre mot de passe';
+                                  }
+                                  return null;
+                                },
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _handleLogin(),
+                              ),
+                              r.verticalSpace(24),
+                              
+                              // Login button
+                              Consumer<AuthProvider>(
+                                builder: (context, auth, _) {
+                                  return SizedBox(
+                                    width: double.infinity,
+                                    height: r.buttonHeight,
+                                    child: ElevatedButton(
+                                      onPressed: auth.isLoading ? null : _handleLogin,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(r.radius(12)),
+                                        ),
+                                        elevation: 2,
+                                      ),
+                                      child: auth.isLoading
+                                          ? SizedBox(
+                                              width: r.scale(24),
+                                              height: r.scale(24),
+                                              child: CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: r.scale(2),
+                                              ),
+                                            )
+                                          : Text(
+                                              'Se connecter',
+                                              style: AppStyles.bodyLargeR(r).copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              r.verticalSpace(16),
+                              
+                              // Forgot password
+                              TextButton(
+                                onPressed: () {
+                                  // TODO: Implement forgot password
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Contactez l\'administrateur pour réinitialiser votre mot de passe'),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                },
+                                child: Text(
+                                  'Mot de passe oublié ?',
+                                  style: AppStyles.bodySmallR(r).copyWith(
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

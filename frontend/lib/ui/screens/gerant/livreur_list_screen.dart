@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
+import '../../../core/constants/responsive.dart';
 import '../../../data/models/models.dart';
 import '../../../providers/providers.dart';
 
@@ -23,11 +24,12 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final r = Responsive(context);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
-        title: Text('Livreurs', style: AppStyles.headingMedium.copyWith(color: Colors.white)),
+        title: Text('Livreurs', style: AppStyles.headingMediumR(r).copyWith(color: Colors.white)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -51,10 +53,10 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                  const SizedBox(height: 16),
-                  Text(provider.errorMessage!, style: AppStyles.bodyMedium),
-                  const SizedBox(height: 16),
+                  Icon(Icons.error_outline, size: r.iconSize(48), color: AppColors.error),
+                  r.verticalSpace(16),
+                  Text(provider.errorMessage!, style: AppStyles.bodyMediumR(r)),
+                  r.verticalSpace(16),
                   ElevatedButton(
                     onPressed: () => provider.loadLivreurs(),
                     child: const Text('Réessayer'),
@@ -69,11 +71,11 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.delivery_dining_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
-                  const SizedBox(height: 16),
-                  Text('Aucun livreur', style: AppStyles.bodyLarge.copyWith(color: AppColors.textSecondary)),
-                  const SizedBox(height: 8),
-                  Text('Ajoutez votre premier livreur', style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                  Icon(Icons.delivery_dining_outlined, size: r.iconSize(64), color: AppColors.textSecondary.withOpacity(0.5)),
+                  r.verticalSpace(16),
+                  Text('Aucun livreur', style: AppStyles.bodyLargeR(r).copyWith(color: AppColors.textSecondary)),
+                  r.verticalSpace(8),
+                  Text('Ajoutez votre premier livreur', style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary)),
                 ],
               ),
             );
@@ -81,13 +83,18 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
 
           return RefreshIndicator(
             onRefresh: () => provider.loadLivreurs(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: provider.livreurs.length,
-              itemBuilder: (context, index) {
-                final livreur = provider.livreurs[index];
-                return _buildLivreurCard(livreur, provider);
-              },
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: r.maxContentWidth),
+                child: ListView.builder(
+                  padding: r.paddingAll(16),
+                  itemCount: provider.livreurs.length,
+                  itemBuilder: (context, index) {
+                    final livreur = provider.livreurs[index];
+                    return _buildLivreurCard(livreur, provider, r);
+                  },
+                ),
+              ),
             ),
           );
         },
@@ -100,32 +107,32 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
     );
   }
 
-  Widget _buildLivreurCard(User livreur, LivreurProvider provider) {
+  Widget _buildLivreurCard(User livreur, LivreurProvider provider, Responsive r) {
     final hasPosition = livreur.latitude != null && livreur.longitude != null;
     
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: EdgeInsets.only(bottom: r.space(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(12))),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
+        contentPadding: r.paddingAll(16),
         leading: Stack(
           children: [
             Container(
-              width: 50,
-              height: 50,
+              width: r.scale(50),
+              height: r.scale(50),
               decoration: BoxDecoration(
                 color: AppColors.accent.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(r.radius(12)),
               ),
-              child: const Icon(Icons.delivery_dining, color: AppColors.accent),
+              child: Icon(Icons.delivery_dining, color: AppColors.accent, size: r.iconSize(24)),
             ),
             if (hasPosition)
               Positioned(
                 right: 0,
                 bottom: 0,
                 child: Container(
-                  width: 14,
-                  height: 14,
+                  width: r.scale(14),
+                  height: r.scale(14),
                   decoration: BoxDecoration(
                     color: AppColors.success,
                     shape: BoxShape.circle,
@@ -137,47 +144,47 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
         ),
         title: Text(
           livreur.nom ?? 'Sans nom',
-          style: AppStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+          style: AppStyles.bodyLargeR(r).copyWith(fontWeight: FontWeight.w600),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (livreur.email.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: r.space(4)),
               Row(
                 children: [
-                  const Icon(Icons.person_outline, size: 14, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.person_outline, size: r.iconSize(14), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Text(
                     livreur.email,
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
             ],
             if (livreur.telephone != null) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: r.space(4)),
               Row(
                 children: [
-                  const Icon(Icons.phone_outlined, size: 14, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.phone_outlined, size: r.iconSize(14), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Text(
                     livreur.telephone!,
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
             ],
             if (livreur.email != null) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: r.space(4)),
               Row(
                 children: [
-                  const Icon(Icons.email_outlined, size: 14, color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  Icon(Icons.email_outlined, size: r.iconSize(14), color: AppColors.textSecondary),
+                  SizedBox(width: r.space(4)),
                   Expanded(
                     child: Text(
                       livreur.email!,
-                      style: AppStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                      style: AppStyles.bodySmallR(r).copyWith(color: AppColors.textSecondary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -185,14 +192,14 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
               ),
             ],
             if (hasPosition) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: r.space(4)),
               Row(
                 children: [
-                  const Icon(Icons.location_on, size: 14, color: AppColors.success),
-                  const SizedBox(width: 4),
+                  Icon(Icons.location_on, size: r.iconSize(14), color: AppColors.success),
+                  SizedBox(width: r.space(4)),
                   Text(
                     '${livreur.latitude!.toStringAsFixed(4)}, ${livreur.longitude!.toStringAsFixed(4)}',
-                    style: AppStyles.bodySmall.copyWith(color: AppColors.success),
+                    style: AppStyles.bodySmallR(r).copyWith(color: AppColors.success),
                   ),
                 ],
               ),
