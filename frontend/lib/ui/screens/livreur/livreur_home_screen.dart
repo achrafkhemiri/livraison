@@ -221,7 +221,9 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
           PopupMenuButton<String>(
             icon: Icon(Icons.account_circle_outlined, color: Colors.white, size: r.iconSize(24)),
             onSelected: (value) {
-              if (value == 'logout') {
+              if (value == 'profile') {
+                Navigator.pushNamed(context, '/profile');
+              } else if (value == 'logout') {
                 _handleLogout();
               }
             },

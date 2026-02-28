@@ -102,7 +102,9 @@ class _GerantDashboardState extends State<GerantDashboard> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle_outlined, color: Colors.white),
             onSelected: (value) {
-              if (value == 'logout') {
+              if (value == 'profile') {
+                Navigator.pushNamed(context, '/profile');
+              } else if (value == 'logout') {
                 _handleLogout();
               }
             },

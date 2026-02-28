@@ -30,6 +30,7 @@ import 'ui/screens/gerant/order_list_screen.dart';
 import 'ui/screens/gerant/admin_map_screen.dart';
 import 'ui/screens/livreur/livreur_home_screen.dart';
 import 'ui/screens/livreur/delivery_map_screen.dart';
+import 'ui/screens/shared/profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -196,6 +197,9 @@ class SmartDeliveryApp extends StatelessWidget {
       // Livreur routes
       '/livreur/home': (context) => const LivreurHomeScreen(),
       '/livreur/map': (context) => const DeliveryMapScreen(),
+      
+      // Shared routes
+      '/profile': (context) => const ProfileScreen(),
     };
   }
 
