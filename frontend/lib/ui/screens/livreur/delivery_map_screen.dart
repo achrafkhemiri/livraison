@@ -32,6 +32,9 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   
   // Default center: Sfax, Tunisia
   static const LatLng _defaultCenter = LatLng(34.74, 10.76);
+  
+  // Live tracking listener
+  VoidCallback? _livreurPositionListener;
 
   @override
   void initState() {
@@ -49,12 +52,36 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initializeMap();
+        _setupLiveTrackingListener();
       }
     });
   }
 
+  /// Set up listener that forwards GPS position changes to the route provider
+  void _setupLiveTrackingListener() {
+    final livreurProvider = context.read<LivreurProvider>();
+    final routeProvider = context.read<DeliveryRouteProvider>();
+    
+    _livreurPositionListener = () {
+      final pos = livreurProvider.currentPosition;
+      if (pos != null && mounted) {
+        routeProvider.updateDriverPosition(pos);
+        
+        // Camera follows driver when live tracking is on
+        if (routeProvider.isLiveTracking && routeProvider.followDriver) {
+          _mapController.move(pos, _mapController.camera.zoom);
+        }
+      }
+    };
+    
+    livreurProvider.addListener(_livreurPositionListener!);
+  }
+
   @override
   void dispose() {
+    if (_livreurPositionListener != null) {
+      context.read<LivreurProvider>().removeListener(_livreurPositionListener!);
+    }
     _tabController.dispose();
     super.dispose();
   }
@@ -149,8 +176,10 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         children: [
           _buildMap(r),
           _buildFloatingControls(r),
+          _buildLiveTrackingBar(r),
           _buildBottomSheet(r),
           if (_isOptimizing) _buildOptimizationOverlay(r),
+          _buildRecalculatingIndicator(r),
         ],
       ),
     );
@@ -1307,6 +1336,211 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
+  // ================== LIVE TRACKING INFO BAR ==================
+
+  Widget _buildLiveTrackingBar(Responsive r) {
+    return Consumer<DeliveryRouteProvider>(
+      builder: (context, routeProvider, _) {
+        if (!routeProvider.isLiveTracking) return const SizedBox.shrink();
+        
+        final isCollectMode = routeProvider.mapMode == MapMode.collect;
+        final nextStop = isCollectMode 
+            ? routeProvider.nextUnCollectedStop?.depotName 
+            : routeProvider.nextUndeliveredStop?.name;
+        final hasRoute = isCollectMode 
+            ? routeProvider.collectionRoutePoints.isNotEmpty
+            : routeProvider.routePoints.isNotEmpty;
+        
+        if (!hasRoute) return const SizedBox.shrink();
+        
+        return Positioned(
+          top: r.space(8),
+          left: r.space(12),
+          right: r.space(12),
+          child: SafeArea(
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: r.space(16), vertical: r.space(12)),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1a237e), Color(0xFF283593)],
+                ),
+                borderRadius: BorderRadius.circular(r.radius(16)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1a237e).withOpacity(0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Top row: next stop name + recalculating badge
+                  Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(r.space(6)),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(r.radius(8)),
+                        ),
+                        child: Icon(
+                          isCollectMode ? Icons.warehouse : Icons.location_on,
+                          color: Colors.white,
+                          size: r.iconSize(18),
+                        ),
+                      ),
+                      SizedBox(width: r.space(10)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isCollectMode ? 'Prochain dépôt' : 'Prochain arrêt',
+                              style: GoogleFonts.poppins(
+                                fontSize: r.fontSize(10),
+                                color: Colors.white.withOpacity(0.7),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              nextStop ?? 'Aucun',
+                              style: GoogleFonts.poppins(
+                                fontSize: r.fontSize(13),
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (routeProvider.isRecalculating)
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: r.space(8), vertical: r.space(4)),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade400,
+                            borderRadius: BorderRadius.circular(r.radius(8)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: r.scale(12),
+                                height: r.scale(12),
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: r.space(4)),
+                              Text(
+                                'Recalcul...',
+                                style: GoogleFonts.poppins(
+                                  fontSize: r.fontSize(9),
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: r.space(10)),
+                  // Bottom row: distance, ETA, remaining info
+                  Row(
+                    children: [
+                      _buildLiveMetric(
+                        icon: Icons.near_me,
+                        label: 'Distance',
+                        value: routeProvider.formattedNextStopDistance,
+                        r: r,
+                      ),
+                      Container(
+                        width: 1,
+                        height: r.scale(30),
+                        color: Colors.white.withOpacity(0.2),
+                      ),
+                      _buildLiveMetric(
+                        icon: Icons.schedule,
+                        label: 'ETA',
+                        value: routeProvider.formattedNextStopEta,
+                        r: r,
+                      ),
+                      Container(
+                        width: 1,
+                        height: r.scale(30),
+                        color: Colors.white.withOpacity(0.2),
+                      ),
+                      _buildLiveMetric(
+                        icon: Icons.route,
+                        label: 'Restant',
+                        value: routeProvider.formattedRemainingDistance,
+                        r: r,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLiveMetric({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Responsive r,
+  }) {
+    return Expanded(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: r.space(6)),
+        child: Column(
+          children: [
+            Icon(icon, color: Colors.white.withOpacity(0.7), size: r.iconSize(14)),
+            SizedBox(height: r.space(2)),
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: r.fontSize(13),
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: r.fontSize(9),
+                color: Colors.white.withOpacity(0.6),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ================== RECALCULATING INDICATOR ==================
+
+  Widget _buildRecalculatingIndicator(Responsive r) {
+    return Consumer<DeliveryRouteProvider>(
+      builder: (context, routeProvider, _) {
+        if (!routeProvider.isRecalculating || !routeProvider.isLiveTracking) {
+          return const SizedBox.shrink();
+        }
+        return const SizedBox.shrink(); // Already shown in the info bar
+      },
+    );
+  }
+
   // ================== MAP ==================
 
   Widget _buildMap(Responsive r) {
@@ -1362,15 +1596,37 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 if (livreurProvider.currentPosition != null)
                   Marker(
                     point: livreurProvider.currentPosition!,
-                    width: 55, height: 55,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2196f3),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 4),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, spreadRadius: 2)],
-                      ),
-                      child: const Center(child: Text('🚚', style: TextStyle(fontSize: 24))),
+                    width: routeProvider.isLiveTracking ? 70 : 55,
+                    height: routeProvider.isLiveTracking ? 70 : 55,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Outer pulse ring for live tracking
+                        if (routeProvider.isLiveTracking)
+                          Container(
+                            width: 65, height: 65,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFF2196f3).withOpacity(0.15),
+                              border: Border.all(
+                                color: const Color(0xFF2196f3).withOpacity(0.3),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        Container(
+                          width: 48, height: 48,
+                          decoration: BoxDecoration(
+                            color: routeProvider.isLiveTracking 
+                                ? const Color(0xFF00C853) 
+                                : const Color(0xFF2196f3),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 4),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, spreadRadius: 2)],
+                          ),
+                          child: const Center(child: Text('🚚', style: TextStyle(fontSize: 22))),
+                        ),
+                      ],
                     ),
                   ),
                 
@@ -1509,54 +1765,121 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   // ================== FLOATING CONTROLS ==================
 
   Widget _buildFloatingControls(Responsive r) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.all(r.space(16)),
-        child: Column(
-          children: [
-            const Spacer(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+    return Consumer<DeliveryRouteProvider>(
+      builder: (context, routeProvider, _) {
+        final hasRoute = routeProvider.mapMode == MapMode.collect
+            ? routeProvider.collectionRoutePoints.isNotEmpty
+            : routeProvider.routePoints.isNotEmpty;
+        
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(r.space(16)),
+            child: Column(
               children: [
-                // Contrôles de zoom
-                Column(
+                const Spacer(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _buildFloatingButton(
-                      icon: Icons.add,
-                      tooltip: 'Zoom +',
-                      r: r,
-                      onPressed: () {
-                        final zoom = _mapController.camera.zoom;
-                        _mapController.move(_mapController.camera.center, zoom + 1);
-                      },
-                    ),
-                    SizedBox(height: r.space(8)),
-                    _buildFloatingButton(
-                      icon: Icons.remove,
-                      tooltip: 'Zoom -',
-                      r: r,
-                      onPressed: () {
-                        final zoom = _mapController.camera.zoom;
-                        _mapController.move(_mapController.camera.center, zoom - 1);
-                      },
-                    ),
-                    SizedBox(height: r.space(8)),
-                    _buildFloatingButton(
-                      icon: Icons.zoom_out_map,
-                      tooltip: 'Tout voir',
-                      r: r,
-                      onPressed: _fitAllMarkers,
-                      backgroundColor: const Color(0xFF1a237e),
-                      iconColor: Colors.white,
+                    Column(
+                      children: [
+                        // Live tracking toggle
+                        if (hasRoute)
+                          _buildFloatingButton(
+                            icon: routeProvider.isLiveTracking 
+                                ? Icons.navigation 
+                                : Icons.navigation_outlined,
+                            tooltip: routeProvider.isLiveTracking 
+                                ? 'Arrêter le suivi' 
+                                : 'Suivi en direct',
+                            r: r,
+                            onPressed: () {
+                              if (routeProvider.isLiveTracking) {
+                                routeProvider.stopLiveTracking();
+                              } else {
+                                routeProvider.startLiveTracking();
+                              }
+                            },
+                            backgroundColor: routeProvider.isLiveTracking 
+                                ? const Color(0xFF00C853)
+                                : Colors.white,
+                            iconColor: routeProvider.isLiveTracking 
+                                ? Colors.white 
+                                : const Color(0xFF00C853),
+                          ),
+                        if (hasRoute) SizedBox(height: r.space(8)),
+                        // Follow driver toggle (only visible during live tracking)
+                        if (routeProvider.isLiveTracking)
+                          _buildFloatingButton(
+                            icon: routeProvider.followDriver 
+                                ? Icons.gps_fixed 
+                                : Icons.gps_not_fixed,
+                            tooltip: routeProvider.followDriver 
+                                ? 'Libérer la carte' 
+                                : 'Suivre le livreur',
+                            r: r,
+                            onPressed: () => routeProvider.toggleFollowDriver(),
+                            backgroundColor: routeProvider.followDriver 
+                                ? const Color(0xFF2196F3)
+                                : Colors.white,
+                            iconColor: routeProvider.followDriver 
+                                ? Colors.white 
+                                : const Color(0xFF2196F3),
+                          ),
+                        if (routeProvider.isLiveTracking) SizedBox(height: r.space(8)),
+                        // Force recalculate button (only during live tracking)
+                        if (routeProvider.isLiveTracking)
+                          _buildFloatingButton(
+                            icon: Icons.refresh,
+                            tooltip: 'Recalculer maintenant',
+                            r: r,
+                            onPressed: routeProvider.isRecalculating 
+                                ? () {} 
+                                : () => routeProvider.forceRecalculate(),
+                            backgroundColor: Colors.white,
+                            iconColor: routeProvider.isRecalculating 
+                                ? Colors.grey 
+                                : Colors.orange.shade700,
+                          ),
+                        if (routeProvider.isLiveTracking) SizedBox(height: r.space(12)),
+                        // Zoom controls
+                        _buildFloatingButton(
+                          icon: Icons.add,
+                          tooltip: 'Zoom +',
+                          r: r,
+                          onPressed: () {
+                            final zoom = _mapController.camera.zoom;
+                            _mapController.move(_mapController.camera.center, zoom + 1);
+                          },
+                        ),
+                        SizedBox(height: r.space(8)),
+                        _buildFloatingButton(
+                          icon: Icons.remove,
+                          tooltip: 'Zoom -',
+                          r: r,
+                          onPressed: () {
+                            final zoom = _mapController.camera.zoom;
+                            _mapController.move(_mapController.camera.center, zoom - 1);
+                          },
+                        ),
+                        SizedBox(height: r.space(8)),
+                        _buildFloatingButton(
+                          icon: Icons.zoom_out_map,
+                          tooltip: 'Tout voir',
+                          r: r,
+                          onPressed: _fitAllMarkers,
+                          backgroundColor: const Color(0xFF1a237e),
+                          iconColor: Colors.white,
+                        ),
+                      ],
                     ),
                   ],
                 ),
+                SizedBox(height: r.space(20)),
               ],
             ),
-            SizedBox(height: r.space(20)),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

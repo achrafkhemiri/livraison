@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -13,6 +14,7 @@ class LivreurProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isTrackingPosition = false;
   String? _errorMessage;
+  StreamSubscription<Position>? _positionSubscription;
   
   List<User> get livreurs => _livreurs;
   User? get currentLivreur => _currentLivreur;
@@ -192,7 +194,8 @@ class LivreurProvider extends ChangeNotifier {
       await updatePosition(_currentPosition!);
       
       // Start listening for position updates
-      Geolocator.getPositionStream(
+      _positionSubscription?.cancel();
+      _positionSubscription = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 10, // Update every 10 meters
@@ -214,6 +217,8 @@ class LivreurProvider extends ChangeNotifier {
   
   // Stop position tracking
   void stopPositionTracking() {
+    _positionSubscription?.cancel();
+    _positionSubscription = null;
     _isTrackingPosition = false;
     notifyListeners();
   }
@@ -254,5 +259,11 @@ class LivreurProvider extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+  
+  @override
+  void dispose() {
+    _positionSubscription?.cancel();
+    super.dispose();
   }
 }

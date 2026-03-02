@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
@@ -89,6 +90,26 @@ class DeliveryRouteProvider extends ChangeNotifier {
   String? _errorMessage;
   int _currentStopIndex = 0;
   
+  // ====== Live Tracking State ======
+  bool _isLiveTracking = false;
+  bool _isRecalculating = false;
+  bool _followDriver = true;
+  LatLng? _driverPosition;
+  double _remainingDistance = 0; // meters
+  double _remainingDuration = 0; // seconds
+  double _nextStopDistance = 0;  // meters to next stop
+  double _nextStopDuration = 0;  // seconds to next stop
+  int _nextStopIndex = -1;       // Index of next undelivered stop
+  DateTime? _lastRecalculation;
+  Timer? _recalcDebounce;
+  DateTime? _lastOsrmDistanceUpdate; // Cooldown for lightweight OSRM distance calls
+  double _lastRouteSpeedKmh = 30.0;  // Average speed from last OSRM calc (km/h)
+  int _driverPolylineIndex = 0;      // Last known index on polyline (for snap search optimization)
+  static const double _arrivalThreshold = 80.0;  // meters to auto-detect arrival
+  static const double _deviationThreshold = 150.0; // meters off-route to trigger recalc
+  static const int _recalcCooldownSeconds = 25;    // min seconds between recalcs
+  static const int _osrmDistanceCooldownSeconds = 15; // min seconds between OSRM distance updates
+  
   // Mode
   MapMode get mapMode => _mapMode;
   
@@ -156,6 +177,68 @@ class DeliveryRouteProvider extends ChangeNotifier {
       return '${hours}h ${minutes}min';
     }
     return '${minutes} min';
+  }
+  
+  // ====== Live Tracking Getters ======
+  bool get isLiveTracking => _isLiveTracking;
+  bool get isRecalculating => _isRecalculating;
+  bool get followDriver => _followDriver;
+  LatLng? get driverPosition => _driverPosition;
+  double get remainingDistance => _remainingDistance;
+  double get remainingDuration => _remainingDuration;
+  double get nextStopDistance => _nextStopDistance;
+  double get nextStopDuration => _nextStopDuration;
+  int get nextStopIndex => _nextStopIndex;
+  
+  /// Formatted remaining distance
+  String get formattedRemainingDistance {
+    if (_remainingDistance >= 1000) {
+      return '${(_remainingDistance / 1000).toStringAsFixed(1)} km';
+    }
+    return '${_remainingDistance.toStringAsFixed(0)} m';
+  }
+  
+  /// Formatted remaining duration  
+  String get formattedRemainingDuration {
+    final hours = (_remainingDuration / 3600).floor();
+    final minutes = ((_remainingDuration % 3600) / 60).floor();
+    if (hours > 0) return '${hours}h ${minutes}min';
+    return '${minutes} min';
+  }
+  
+  /// Formatted next stop distance
+  String get formattedNextStopDistance {
+    if (_nextStopDistance >= 1000) {
+      return '${(_nextStopDistance / 1000).toStringAsFixed(1)} km';
+    }
+    return '${_nextStopDistance.toStringAsFixed(0)} m';
+  }
+  
+  /// Formatted next stop ETA
+  String get formattedNextStopEta {
+    final minutes = (_nextStopDuration / 60).ceil();
+    if (minutes >= 60) {
+      return '${(minutes / 60).floor()}h ${minutes % 60}min';
+    }
+    return '$minutes min';
+  }
+  
+  /// Get the next undelivered stop info
+  DeliveryStop? get nextUndeliveredStop {
+    final selected = selectedStops;
+    for (int i = 0; i < selected.length; i++) {
+      if (!selected[i].isDelivered) return selected[i];
+    }
+    return null;
+  }
+  
+  /// Get the next uncollected collection stop
+  CollectionStop? get nextUnCollectedStop {
+    final selected = selectedCollectionStops;
+    for (final stop in selected) {
+      if (!stop.isCollected) return stop;
+    }
+    return null;
   }
   
   // Check OSRM availability
@@ -639,6 +722,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
     _currentStopIndex = 0;
     _errorMessage = null;
     _usedOsrmGeometry = false;
+    _resetLiveTrackingState();
     notifyListeners();
   }
   
@@ -1233,8 +1317,587 @@ class DeliveryRouteProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ====================================================================
+  // ============= LIVE TRACKING & DYNAMIC ROUTE RECALCULATION ==========
+  // ====================================================================
+
+  /// Start live tracking mode
+  void startLiveTracking() {
+    _isLiveTracking = true;
+    _followDriver = true;
+    _updateNextStopIndex();
+    notifyListeners();
+    debugPrint('🔴 Live tracking STARTED');
+  }
+
+  /// Stop live tracking mode
+  void stopLiveTracking() {
+    _isLiveTracking = false;
+    _isRecalculating = false;
+    _followDriver = false;
+    _recalcDebounce?.cancel();
+    _recalcDebounce = null;
+    notifyListeners();
+    debugPrint('⏹️ Live tracking STOPPED');
+  }
+
+  /// Toggle follow driver mode (camera follows driver)
+  void toggleFollowDriver() {
+    _followDriver = !_followDriver;
+    notifyListeners();
+  }
+
+  /// Main entry point: called when GPS position changes
+  /// This method handles all live tracking logic:
+  /// 1. Updates driver position
+  /// 2. Checks proximity to next stop
+  /// 3. Triggers route recalculation if needed
+  Future<void> updateDriverPosition(LatLng position) async {
+    _driverPosition = position;
+    
+    if (!_isLiveTracking) {
+      notifyListeners();
+      return;
+    }
+
+    // Update start position for route calculations
+    _startPosition = position;
+
+    final isCollectMode = _mapMode == MapMode.collect;
+
+    // Check if driver is near next stop (auto-arrival detection)
+    _checkProximityToNextStop(position, isCollectMode);
+
+    // Update distances to next stop — OSRM when cooldown allows, haversine otherwise
+    await _updateDistanceToNextStop(position, isCollectMode);
+
+    // Check if we need to recalculate the route
+    final shouldRecalc = _shouldRecalculateRoute(position);
+    
+    notifyListeners();
+
+    if (shouldRecalc) {
+      _recalcDebounce?.cancel();
+      _recalcDebounce = Timer(const Duration(seconds: 2), () {
+        _recalculateFromCurrentPosition(position, isCollectMode);
+      });
+    }
+  }
+
+  /// Check if driver is close enough to the next stop to mark arrival
+  void _checkProximityToNextStop(LatLng driverPos, bool isCollectMode) {
+    if (isCollectMode) {
+      final nextStop = nextUnCollectedStop;
+      if (nextStop == null) return;
+      
+      final distance = OsrmService.haversineDistance(
+        driverPos.latitude, driverPos.longitude,
+        nextStop.position.latitude, nextStop.position.longitude,
+      ) * 1000; // km to m
+      
+      if (distance < _arrivalThreshold) {
+        debugPrint('📍 Arrived at collection stop: ${nextStop.depotName} (${distance.toStringAsFixed(0)}m)');
+        // Don't auto-mark as collected, just notify - the driver confirms manually
+      }
+    } else {
+      final nextStop = nextUndeliveredStop;
+      if (nextStop == null) return;
+      
+      final distance = OsrmService.haversineDistance(
+        driverPos.latitude, driverPos.longitude,
+        nextStop.position.latitude, nextStop.position.longitude,
+      ) * 1000;
+      
+      if (distance < _arrivalThreshold) {
+        debugPrint('📍 Arrived near delivery stop: ${nextStop.name} (${distance.toStringAsFixed(0)}m)');
+      }
+    }
+  }
+
+  /// Update real-time distance to the next stop using 3-layer precision:
+  /// Layer 1: Snap-to-route polyline (instant, ~95-98% accurate, 0 network cost)
+  /// Layer 2: OSRM getDistance (every 15s, ~99% accurate, 1 lightweight call)
+  /// Layer 3: Haversine fallback (if no polyline available)
+  Future<void> _updateDistanceToNextStop(LatLng driverPos, bool isCollectMode) async {
+    // Determine next stop position
+    LatLng? nextStopPos;
+    if (isCollectMode) {
+      final nextStop = nextUnCollectedStop;
+      if (nextStop == null) {
+        _nextStopDistance = 0;
+        _nextStopDuration = 0;
+        _updateNextStopIndex();
+        return;
+      }
+      nextStopPos = nextStop.position;
+    } else {
+      final nextStop = nextUndeliveredStop;
+      if (nextStop == null) {
+        _nextStopDistance = 0;
+        _nextStopDuration = 0;
+        _updateNextStopIndex();
+        return;
+      }
+      nextStopPos = nextStop.position;
+    }
+
+    // ── Layer 1: Snap-to-route polyline distance (primary) ──
+    final routePoints = isCollectMode ? _collectionRoutePoints : _routePoints;
+    final polylineDist = _distanceAlongPolyline(driverPos, nextStopPos, routePoints);
+
+    if (polylineDist != null) {
+      _nextStopDistance = polylineDist;
+      // ETA from average route speed (calibrated by last OSRM calc)
+      _nextStopDuration = (polylineDist / 1000) / _lastRouteSpeedKmh * 3600;
+    } else {
+      // ── Layer 3: Haversine fallback (no polyline available) ──
+      final haversineDist = OsrmService.haversineDistance(
+        driverPos.latitude, driverPos.longitude,
+        nextStopPos.latitude, nextStopPos.longitude,
+      ) * 1000;
+      _nextStopDistance = haversineDist;
+      _nextStopDuration = (haversineDist / 1000) / _lastRouteSpeedKmh * 3600;
+    }
+
+    // ── Layer 2: OSRM precision calibration (rate-limited) ──
+    final canCallOsrm = _isOsrmAvailable && (
+      _lastOsrmDistanceUpdate == null ||
+      DateTime.now().difference(_lastOsrmDistanceUpdate!).inSeconds >= _osrmDistanceCooldownSeconds
+    );
+
+    if (canCallOsrm) {
+      try {
+        final result = await OsrmService.getDistance(
+          driverPos.latitude, driverPos.longitude,
+          nextStopPos.latitude, nextStopPos.longitude,
+        );
+        if (result != null) {
+          final osrmDist = result['distance']! * 1000;  // km → m
+          final osrmDur = result['duration']! * 60;     // min → s
+          _nextStopDistance = osrmDist;
+          _nextStopDuration = osrmDur;
+          _lastOsrmDistanceUpdate = DateTime.now();
+          // Calibrate speed for polyline ETA calculations
+          if (osrmDist > 100) {
+            _lastRouteSpeedKmh = (osrmDist / 1000) / (osrmDur / 3600);
+            _lastRouteSpeedKmh = _lastRouteSpeedKmh.clamp(5.0, 120.0);
+          }
+          debugPrint('📏 OSRM calibration: ${(osrmDist/1000).toStringAsFixed(2)}km, ETA: ${(osrmDur/60).toStringAsFixed(0)}min, speed: ${_lastRouteSpeedKmh.toStringAsFixed(0)}km/h');
+        }
+      } catch (e) {
+        debugPrint('⚠️ OSRM distance call failed, using polyline/haversine: $e');
+      }
+    }
+
+    // Also update remaining total distance along polyline
+    _updateRemainingDistanceFromPolyline(driverPos, isCollectMode);
+
+    _updateNextStopIndex();
+  }
+
+  /// Calculate distance from driver to a target along the route polyline.
+  /// Snaps the driver to the nearest polyline segment, then sums segment
+  /// distances from the snap point to the polyline point nearest the target.
+  /// Returns null if polyline is empty or too short.
+  double? _distanceAlongPolyline(LatLng driver, LatLng target, List<LatLng> polyline) {
+    if (polyline.length < 2) return null;
+
+    // 1. Find nearest segment to driver (search around last known index for speed)
+    final snapResult = _snapToPolyline(driver, polyline);
+    if (snapResult == null) return null;
+    final driverSegIdx = snapResult.segmentIndex;
+    final driverSnapPoint = snapResult.snappedPoint;
+
+    // 2. Find nearest segment to target (search from driver forward)
+    final targetSnap = _snapToPolyline(target, polyline, searchFrom: driverSegIdx);
+    if (targetSnap == null) return null;
+    final targetSegIdx = targetSnap.segmentIndex;
+    final targetSnapPoint = targetSnap.snappedPoint;
+
+    // 3. Sum distances along polyline from driver snap → target snap
+    double totalDist = 0;
+
+    if (driverSegIdx == targetSegIdx) {
+      // Same segment: just distance between the two snap points
+      totalDist = _haversineM(driverSnapPoint, targetSnapPoint);
+    } else {
+      // Distance from driver snap to end of its segment
+      totalDist += _haversineM(driverSnapPoint, polyline[driverSegIdx + 1]);
+      // Sum complete segments in between
+      for (int i = driverSegIdx + 1; i < targetSegIdx; i++) {
+        totalDist += _haversineM(polyline[i], polyline[i + 1]);
+      }
+      // Distance from start of target segment to target snap
+      totalDist += _haversineM(polyline[targetSegIdx], targetSnapPoint);
+    }
+
+    // Cache driver's polyline index for next search optimization
+    _driverPolylineIndex = driverSegIdx;
+
+    return totalDist;
+  }
+
+  /// Snap a point to the nearest segment on the polyline.
+  /// Returns the segment index and the projected (snapped) point.
+  /// Optionally searches from [searchFrom] index for performance.
+  _SnapResult? _snapToPolyline(LatLng point, List<LatLng> polyline, {int searchFrom = 0}) {
+    if (polyline.length < 2) return null;
+
+    double bestDist = double.infinity;
+    int bestIdx = 0;
+    LatLng bestPoint = polyline[0];
+
+    // Search window: from searchFrom, check up to 80 segments forward,
+    // and a small backward window for edge cases
+    final start = (searchFrom - 5).clamp(0, polyline.length - 2);
+    final end = (searchFrom + 80).clamp(0, polyline.length - 1);
+
+    for (int i = start; i < end; i++) {
+      final projected = _projectOntoSegment(point, polyline[i], polyline[i + 1]);
+      final dist = _haversineM(point, projected);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+        bestPoint = projected;
+      }
+    }
+
+    // If best distance is too far (>500m), the point is likely off-route
+    if (bestDist > 500) return null;
+
+    return _SnapResult(segmentIndex: bestIdx, snappedPoint: bestPoint, distance: bestDist);
+  }
+
+  /// Project a point onto a line segment, returning the closest point on the segment.
+  LatLng _projectOntoSegment(LatLng point, LatLng segA, LatLng segB) {
+    // Use flat-earth approximation (accurate enough for short segments <1km)
+    final dx = segB.longitude - segA.longitude;
+    final dy = segB.latitude - segA.latitude;
+    final lenSq = dx * dx + dy * dy;
+
+    if (lenSq < 1e-12) return segA; // Degenerate segment
+
+    // t = projection parameter [0,1]
+    final t = ((point.longitude - segA.longitude) * dx +
+               (point.latitude - segA.latitude) * dy) / lenSq;
+    final clamped = t.clamp(0.0, 1.0);
+
+    return LatLng(
+      segA.latitude + clamped * dy,
+      segA.longitude + clamped * dx,
+    );
+  }
+
+  /// Haversine distance in meters between two LatLng points
+  double _haversineM(LatLng a, LatLng b) {
+    return OsrmService.haversineDistance(
+      a.latitude, a.longitude, b.latitude, b.longitude,
+    ) * 1000;
+  }
+
+  /// Update _remainingDistance/_remainingDuration by summing polyline from driver to end
+  void _updateRemainingDistanceFromPolyline(LatLng driverPos, bool isCollectMode) {
+    final routePoints = isCollectMode ? _collectionRoutePoints : _routePoints;
+    if (routePoints.length < 2) return;
+
+    final snap = _snapToPolyline(driverPos, routePoints, searchFrom: _driverPolylineIndex);
+    if (snap == null) return;
+
+    double dist = 0;
+    // Distance from snap point to end of its segment
+    dist += _haversineM(snap.snappedPoint, routePoints[snap.segmentIndex + 1]);
+    // Sum all remaining segments
+    for (int i = snap.segmentIndex + 1; i < routePoints.length - 1; i++) {
+      dist += _haversineM(routePoints[i], routePoints[i + 1]);
+    }
+
+    _remainingDistance = dist;
+    _remainingDuration = (dist / 1000) / _lastRouteSpeedKmh * 3600;
+  }
+
+  /// Find the index of the next undelivered/uncollected stop
+  void _updateNextStopIndex() {
+    if (_mapMode == MapMode.collect) {
+      final selected = selectedCollectionStops;
+      for (int i = 0; i < selected.length; i++) {
+        if (!selected[i].isCollected) {
+          _nextStopIndex = i;
+          return;
+        }
+      }
+    } else {
+      final selected = selectedStops;
+      for (int i = 0; i < selected.length; i++) {
+        if (!selected[i].isDelivered) {
+          _nextStopIndex = i;
+          return;
+        }
+      }
+    }
+    _nextStopIndex = -1;
+  }
+
+  /// Determine if route recalculation is needed
+  bool _shouldRecalculateRoute(LatLng driverPos) {
+    // Don't recalculate if no route exists
+    final hasRoute = _mapMode == MapMode.collect 
+        ? _collectionRoutePoints.isNotEmpty 
+        : _routePoints.isNotEmpty;
+    if (!hasRoute) return false;
+
+    // Already recalculating
+    if (_isRecalculating) return false;
+
+    // Respect cooldown
+    if (_lastRecalculation != null) {
+      final elapsed = DateTime.now().difference(_lastRecalculation!).inSeconds;
+      if (elapsed < _recalcCooldownSeconds) return false;
+    }
+
+    // Check if driver deviated from planned route
+    final routePoints = _mapMode == MapMode.collect 
+        ? _collectionRoutePoints 
+        : _routePoints;
+    final deviation = _minDistanceToRoute(driverPos, routePoints);
+    
+    if (deviation > _deviationThreshold) {
+      debugPrint('🔄 Route deviation detected: ${deviation.toStringAsFixed(0)}m (threshold: ${_deviationThreshold}m)');
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Calculate minimum distance from a point to the route polyline
+  double _minDistanceToRoute(LatLng point, List<LatLng> route) {
+    if (route.isEmpty) return double.infinity;
+    
+    double minDist = double.infinity;
+    // Only check nearby segments for performance (within first 50 segments)
+    final checkLimit = route.length < 50 ? route.length - 1 : 50;
+    
+    for (int i = 0; i < checkLimit; i++) {
+      final dist = _pointToSegmentDistance(
+        point, route[i], route[i + 1],
+      );
+      if (dist < minDist) minDist = dist;
+    }
+    return minDist;
+  }
+
+  /// Distance from a point to a line segment (in meters)
+  double _pointToSegmentDistance(LatLng point, LatLng segA, LatLng segB) {
+    // Project point onto segment using haversine approximation
+    final dAP = OsrmService.haversineDistance(
+      segA.latitude, segA.longitude, point.latitude, point.longitude,
+    ) * 1000;
+    final dBP = OsrmService.haversineDistance(
+      segB.latitude, segB.longitude, point.latitude, point.longitude,
+    ) * 1000;
+    final dAB = OsrmService.haversineDistance(
+      segA.latitude, segA.longitude, segB.latitude, segB.longitude,
+    ) * 1000;
+    
+    if (dAB < 1) return dAP; // Degenerate segment
+    
+    // Use cosine rule to find perpendicular distance
+    final cosAngle = (dAP * dAP + dAB * dAB - dBP * dBP) / (2 * dAP * dAB);
+    
+    if (cosAngle < 0) return dAP; // Point is before segment start
+    if (cosAngle > 1) return dBP; // Point is after segment end
+    
+    // Check if projection falls within segment
+    final projDist = dAP * cosAngle;
+    if (projDist > dAB) return dBP;
+    
+    // Perpendicular distance
+    final perpDist = dAP * (1 - cosAngle * cosAngle).abs().clamp(0.0, 1.0);
+    // Use sqrt for actual distance
+    return dAP * (1 - cosAngle * cosAngle).abs().clamp(0.0, double.infinity);
+  }
+
+  /// Recalculate route from current driver position through remaining stops
+  /// This is a lightweight recalculation - just gets new OSRM route geometry
+  /// without re-running the full TSP optimization
+  Future<void> _recalculateFromCurrentPosition(LatLng currentPos, bool isCollectMode) async {
+    if (_isRecalculating) return;
+    
+    _isRecalculating = true;
+    notifyListeners();
+    
+    try {
+      debugPrint('🔄 Recalculating route from current position...');
+      
+      if (isCollectMode) {
+        await _recalculateCollectionRoute(currentPos);
+      } else {
+        await _recalculateDeliveryRoute(currentPos);
+      }
+      
+      _lastRecalculation = DateTime.now();
+      debugPrint('✅ Route recalculation complete');
+    } catch (e) {
+      debugPrint('❌ Route recalculation failed: $e');
+    } finally {
+      _isRecalculating = false;
+      notifyListeners();
+    }
+  }
+
+  /// Recalculate delivery route from current position through remaining stops
+  Future<void> _recalculateDeliveryRoute(LatLng currentPos) async {
+    final remainingStops = selectedStops.where((s) => !s.isDelivered).toList();
+    if (remainingStops.isEmpty) {
+      _routePoints = [];
+      _remainingDistance = 0;
+      _remainingDuration = 0;
+      return;
+    }
+
+    final waypoints = [currentPos, ...remainingStops.map((s) => s.position)];
+    
+    if (_isOsrmAvailable) {
+      final route = await OsrmService.getRoute(waypoints);
+      if (route != null && route.geometry.length > 2) {
+        _routePoints = route.geometry;
+        _remainingDistance = route.distance * 1000;
+        _remainingDuration = route.duration * 60;
+        _totalDistance = _remainingDistance;
+        _totalDuration = _remainingDuration;
+        _usedOsrmGeometry = true;
+        _driverPolylineIndex = 0; // Reset snap index after new polyline
+        
+        // Calibrate speed from OSRM route data
+        if (route.distance > 0.1 && route.duration > 0.1) {
+          _lastRouteSpeedKmh = (route.distance / (route.duration / 60)).clamp(5.0, 120.0);
+        }
+        
+        // Update next stop metrics from OSRM if available
+        if (remainingStops.isNotEmpty) {
+          final nextWaypoints = [currentPos, remainingStops.first.position];
+          final nextRoute = await OsrmService.getRoute(nextWaypoints);
+          if (nextRoute != null) {
+            _nextStopDistance = nextRoute.distance * 1000;
+            _nextStopDuration = nextRoute.duration * 60;
+          }
+        }
+        
+        debugPrint('📍 Recalculated: ${_routePoints.length} points, ${(_remainingDistance/1000).toStringAsFixed(1)}km, ${(_remainingDuration/60).toStringAsFixed(0)}min');
+      } else {
+        // OSRM failed, use interpolation
+        _routePoints = _interpolateRoute(waypoints);
+        _calculateFallbackMetrics(waypoints);
+        _remainingDistance = _totalDistance;
+        _remainingDuration = _totalDuration;
+      }
+    } else {
+      _routePoints = _interpolateRoute(waypoints);
+      _calculateFallbackMetrics(waypoints);
+      _remainingDistance = _totalDistance;
+      _remainingDuration = _totalDuration;
+    }
+  }
+
+  /// Recalculate collection route from current position through remaining stops
+  Future<void> _recalculateCollectionRoute(LatLng currentPos) async {
+    final remainingStops = selectedCollectionStops.where((s) => !s.isCollected).toList();
+    if (remainingStops.isEmpty) {
+      _collectionRoutePoints = [];
+      _remainingDistance = 0;
+      _remainingDuration = 0;
+      return;
+    }
+
+    final waypoints = [currentPos, ...remainingStops.map((s) => s.position)];
+    
+    if (_isOsrmAvailable) {
+      final route = await OsrmService.getRoute(waypoints);
+      if (route != null && route.geometry.length > 2) {
+        _collectionRoutePoints = route.geometry;
+        _remainingDistance = route.distance * 1000;
+        _remainingDuration = route.duration * 60;
+        _collectionDistance = _remainingDistance;
+        _collectionDuration = _remainingDuration;
+        _usedOsrmGeometryCollection = true;
+        _driverPolylineIndex = 0; // Reset snap index after new polyline
+        
+        // Calibrate speed from OSRM route data
+        if (route.distance > 0.1 && route.duration > 0.1) {
+          _lastRouteSpeedKmh = (route.distance / (route.duration / 60)).clamp(5.0, 120.0);
+        }
+        
+        if (remainingStops.isNotEmpty) {
+          final nextWaypoints = [currentPos, remainingStops.first.position];
+          final nextRoute = await OsrmService.getRoute(nextWaypoints);
+          if (nextRoute != null) {
+            _nextStopDistance = nextRoute.distance * 1000;
+            _nextStopDuration = nextRoute.duration * 60;
+          }
+        }
+        
+        debugPrint('📍 Collection recalculated: ${_collectionRoutePoints.length} points, ${(_remainingDistance/1000).toStringAsFixed(1)}km');
+      } else {
+        _collectionRoutePoints = _interpolateRoute(waypoints);
+        _calculateFallbackCollectionMetrics(waypoints);
+        _remainingDistance = _collectionDistance;
+        _remainingDuration = _collectionDuration;
+      }
+    } else {
+      _collectionRoutePoints = _interpolateRoute(waypoints);
+      _calculateFallbackCollectionMetrics(waypoints);
+      _remainingDistance = _collectionDistance;
+      _remainingDuration = _collectionDuration;
+    }
+  }
+
+  /// Force recalculation now (user-triggered refresh)
+  Future<void> forceRecalculate() async {
+    if (_driverPosition == null || !_isLiveTracking) return;
+    _lastRecalculation = null; // Reset cooldown
+    final isCollectMode = _mapMode == MapMode.collect;
+    await _recalculateFromCurrentPosition(_driverPosition!, isCollectMode);
+  }
+
+  /// Reset live tracking state
+  void _resetLiveTrackingState() {
+    _isLiveTracking = false;
+    _isRecalculating = false;
+    _followDriver = false;
+    _driverPosition = null;
+    _remainingDistance = 0;
+    _remainingDuration = 0;
+    _nextStopDistance = 0;
+    _nextStopDuration = 0;
+    _nextStopIndex = -1;
+    _lastRecalculation = null;
+    _lastOsrmDistanceUpdate = null;
+    _lastRouteSpeedKmh = 30.0;
+    _driverPolylineIndex = 0;
+    _recalcDebounce?.cancel();
+    _recalcDebounce = null;
+  }
+
   void clearError() {
     _errorMessage = null;
     notifyListeners();
   }
+  
+  @override
+  void dispose() {
+    _recalcDebounce?.cancel();
+    super.dispose();
+  }
+}
+
+/// Helper class for polyline snap results
+class _SnapResult {
+  final int segmentIndex;
+  final LatLng snappedPoint;
+  final double distance; // meters from original point to snapped point
+
+  const _SnapResult({
+    required this.segmentIndex,
+    required this.snappedPoint,
+    required this.distance,
+  });
 }
