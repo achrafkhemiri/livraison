@@ -1,0 +1,80 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Produits</h1>
+    <button class="btn-primary" (click)="openCreate()"><span class="material-icons">add</span> Nouveau Produit</button>
+  </div>
+
+  <div class="filters-bar">
+    <input type="text" class="search-input" [(ngModel)]="searchTerm" (ngModelChange)="applyFilter()" placeholder="Rechercher un produit...">
+  </div>
+
+  <div class="table-container" *ngIf="!loading">
+    <table *ngIf="filteredProduits.length > 0">
+      <thead>
+        <tr>
+          <th>Référence</th>
+          <th>Désignation</th>
+          <th>Catégorie</th>
+          <th>Prix HT</th>
+          <th>Prix TTC</th>
+          <th>TVA</th>
+          <th>Statut</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let p of filteredProduits">
+          <td style="font-weight: 600; color: #1A237E;">{{ p.reference }}</td>
+          <td>{{ p.designation }}</td>
+          <td>{{ p.categorie || '-' }}</td>
+          <td>{{ p.prixHT.toFixed(3) }} TND</td>
+          <td style="font-weight: 600;">{{ p.prixTTC.toFixed(3) }} TND</td>
+          <td>{{ p.tauxTva ? (p.tauxTva + '%') : '-' }}</td>
+          <td><span class="status-dot" [class.active]="p.actif" [class.inactive]="!p.actif" style="display:inline-block;"></span></td>
+          <td>
+            <div style="display:flex;gap:4px;">
+              <button class="btn-icon" (click)="openEdit(p)"><span class="material-icons">edit</span></button>
+              <button class="btn-icon danger" (click)="delete(p)"><span class="material-icons">delete</span></button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div *ngIf="filteredProduits.length === 0" class="empty-state"><span class="material-icons">inventory_2</span><p>Aucun produit trouvé</p></div>
+  </div>
+  <div *ngIf="loading" class="loading-state"><div class="spinner"></div><p>Chargement...</p></div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" *ngIf="showForm" (click)="closeForm()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ editingProduit ? 'Modifier' : 'Nouveau' }} Produit</h2>
+        <button class="btn-icon" (click)="closeForm()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group"><label>Référence *</label><input type="text" [(ngModel)]="formData.reference" placeholder="REF001"></div>
+          <div class="form-group"><label>Désignation *</label><input type="text" [(ngModel)]="formData.designation" placeholder="Nom du produit"></div>
+        </div>
+        <div class="form-group"><label>Description</label><textarea [(ngModel)]="formData.description" rows="2" placeholder="Description..."></textarea></div>
+        <div class="form-row">
+          <div class="form-group"><label>Prix HT</label><input type="number" [(ngModel)]="formData.prixHT" step="0.001"></div>
+          <div class="form-group"><label>Prix TTC</label><input type="number" [(ngModel)]="formData.prixTTC" step="0.001"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Catégorie</label><input type="text" [(ngModel)]="formData.categorie" placeholder="Catégorie"></div>
+          <div class="form-group"><label>Unité</label><input type="text" [(ngModel)]="formData.unite" placeholder="kg, L, pcs..."></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Poids (kg)</label><input type="number" [(ngModel)]="formData.poids" step="0.01"></div>
+          <div class="form-group"><label>Taux TVA (%)</label><input type="number" [(ngModel)]="formData.tauxTva" step="0.01"></div>
+        </div>
+        <div class="form-group"><label class="checkbox-label"><input type="checkbox" [(ngModel)]="formData.actif"> Actif</label></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closeForm()">Annuler</button>
+        <button class="btn-primary" (click)="save()">{{ editingProduit ? 'Modifier' : 'Créer' }}</button>
+      </div>
+    </div>
+  </div>
+</div>

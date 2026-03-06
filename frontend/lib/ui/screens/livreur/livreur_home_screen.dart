@@ -6,6 +6,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
 import '../../../core/constants/responsive.dart';
 import '../../../data/models/models.dart';
+import '../../../data/services/fcm_notification_service.dart';
 import '../../../providers/providers.dart';
 
 class LivreurHomeScreen extends StatefulWidget {
@@ -48,6 +49,17 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
       if (mounted) {
         context.read<NotificationProvider>().startPolling(seconds: 15);
       }
+
+      // Listen for foreground FCM messages to auto-refresh orders
+      final fcmService = FcmNotificationService();
+      fcmService.onForegroundMessage = (data) {
+        if (mounted && authProvider.user != null) {
+          orderProvider.loadProposedOrders();
+          orderProvider.loadOrdersForLivreur(authProvider.user!.id!);
+          orderProvider.loadPendingOrdersForLivreur(authProvider.user!.id!);
+          context.read<NotificationProvider>().fetchUnreadCount();
+        }
+      };
     }
   }
 

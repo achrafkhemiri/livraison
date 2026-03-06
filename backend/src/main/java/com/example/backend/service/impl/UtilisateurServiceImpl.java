@@ -6,7 +6,9 @@ import com.example.backend.exception.DuplicateResourceException;
 import com.example.backend.exception.ResourceNotFoundException;
 import com.example.backend.mapper.UtilisateurMapper;
 import com.example.backend.model.Role;
+import com.example.backend.model.Societe;
 import com.example.backend.model.Utilisateur;
+import com.example.backend.repository.SocieteRepository;
 import com.example.backend.repository.UtilisateurRepository;
 import com.example.backend.service.UtilisateurService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class UtilisateurServiceImpl implements UtilisateurService {
     private final UtilisateurRepository utilisateurRepository;
     private final UtilisateurMapper utilisateurMapper;
     private final PasswordEncoder passwordEncoder;
+    private final SocieteRepository societeRepository;
     
     @Override
     @Transactional(readOnly = true)
@@ -96,6 +99,14 @@ public class UtilisateurServiceImpl implements UtilisateurService {
         
         Utilisateur utilisateur = utilisateurMapper.toEntity(createDTO);
         utilisateur.setPassword(passwordEncoder.encode(createDTO.getPassword()));
+
+        // Set societe from DTO or from current gerant context
+        if (createDTO.getSocieteId() != null) {
+            Societe societe = societeRepository.findById(createDTO.getSocieteId()).orElse(null);
+            if (societe != null) {
+                utilisateur.setSociete(societe);
+            }
+        }
         
         utilisateur = utilisateurRepository.save(utilisateur);
         return utilisateurMapper.toDTO(utilisateur);

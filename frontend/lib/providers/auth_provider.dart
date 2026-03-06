@@ -44,7 +44,26 @@ class AuthProvider extends ChangeNotifier {
       final isLoggedIn = await _authService.isLoggedIn();
       if (isLoggedIn) {
         _token = await _authService.getToken();
-        // TODO: Fetch user profile from backend
+        
+        // Restore user data from secure storage
+        _user = await _authService.loadUserData();
+        
+        // Validate token by calling /auth/me and refresh user data
+        try {
+          final freshUser = await _authService.fetchMe();
+          _user = freshUser;
+          await _authService.saveUserData(freshUser);
+        } catch (e) {
+          // If /auth/me fails (token expired/invalid), fall back to stored data
+          if (_user == null) {
+            // No stored user and token invalid → force login
+            _status = AuthStatus.unauthenticated;
+            notifyListeners();
+            return;
+          }
+          // Stored user exists, continue with cached data
+        }
+        
         _status = AuthStatus.authenticated;
       } else {
         _status = AuthStatus.unauthenticated;
@@ -75,6 +94,8 @@ class AuthProvider extends ChangeNotifier {
         societeId: response.societeId,
         societeNom: response.societeNom,
       );
+      // Persist user data for session restore
+      await _authService.saveUserData(_user!);
       _status = AuthStatus.authenticated;
       notifyListeners();
       return true;
@@ -117,6 +138,8 @@ class AuthProvider extends ChangeNotifier {
         prenom: response.prenom,
         role: response.role,
       );
+      // Persist user data for session restore
+      await _authService.saveUserData(_user!);
       _status = AuthStatus.authenticated;
       notifyListeners();
       return true;

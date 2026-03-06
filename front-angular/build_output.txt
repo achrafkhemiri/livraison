@@ -1,0 +1,84 @@
+﻿node : - Generating browser application bundles (phase: setup)...
+Au caractère Ligne:1 : 63
++ ... t-angular"; node node_modules/@angular/cli/bin/ng.js build 2>&1 | Out ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (- Generating br...hase: setup)..  
+  .:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Ô£ö Browser application bundle generation complete.
+Ô£ö Browser application bundle generation complete.
+
+Warning: C:\Users\USER\Desktop\Nouveau dossier 
+(2)\front-angular\src\app\pages\carte\carte.component.ts depends on 'leaflet'. 
+CommonJS or AMD dependencies can cause optimization bailouts.
+For more info see: 
+https://angular.io/guide/build#configuring-commonjs-dependencies
+
+
+
+Error: src/app/app.module.ts:31:5 - error NG6001: The class 'LayoutComponent' 
+is listed in the declarations of the NgModule 'AppModule', but is not a 
+directive, a component, or a pipe. Either remove it from the NgModule's 
+declarations, or add an appropriate Angular decorator.
+
+31     LayoutComponent,
+       ~~~~~~~~~~~~~~~
+
+  src/app/layout/layout.component.ts:14:14
+    14 export class LayoutComponent implements OnInit, OnDestroy {
+                    ~~~~~~~~~~~~~~~
+    'LayoutComponent' is declared here.
+
+
+Error: src/app/layout/layout.component.ts:3:29 - error TS2307: Cannot find 
+module '../../services/auth.service' or its corresponding type declarations.
+
+3 import { AuthService } from '../../services/auth.service';
+                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Error: src/app/layout/layout.component.ts:4:37 - error TS2307: Cannot find 
+module '../../services/notification.service' or its corresponding type 
+declarations.
+
+4 import { NotificationService } from '../../services/notification.service';
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Error: src/app/layout/layout.component.ts:5:33 - error TS2307: Cannot find 
+module '../../models/notification.model' or its corresponding type 
+declarations.
+
+5 import { AppNotification } from '../../models/notification.model';
+                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Error: src/app/layout/layout.component.ts:37:13 - error NG2003: No suitable 
+injection token for parameter 'authService' of class 'LayoutComponent'.
+  Consider using the @Inject decorator to specify an injection token.
+
+37     private authService: AuthService,
+               ~~~~~~~~~~~
+
+  src/app/layout/layout.component.ts:37:26
+    37     private authService: AuthService,
+                                ~~~~~~~~~~~
+    This type does not have a value, so it cannot be used as injection token.
+
+
+Error: src/app/layout/layout.component.ts:63:57 - error TS7006: Parameter 
+'res' implicitly has an 'any' type.
+
+63     this.notificationService.getUnreadCount().subscribe(res => {
+                                                           ~~~
+
+
+Error: src/app/layout/layout.component.ts:76:51 - error TS7006: Parameter 
+'notifs' implicitly has an 'any' type.
+
+76       this.notificationService.getAll().subscribe(notifs => {
+                                                     ~~~~~~
+
+
+

@@ -1,0 +1,128 @@
+<div class="dashboard">
+  <!-- Welcome Section -->
+  <div class="welcome-section">
+    <div>
+      <h1>Bonjour, {{ userName }} 👋</h1>
+      <p *ngIf="societeName">{{ societeName }}</p>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <span class="material-icons">shopping_cart</span>
+      </div>
+      <div class="stat-info">
+        <span class="stat-value">{{ totalOrders }}</span>
+        <span class="stat-label">Total Commandes</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon orange">
+        <span class="material-icons">pending_actions</span>
+      </div>
+      <div class="stat-info">
+        <span class="stat-value">{{ pendingOrders }}</span>
+        <span class="stat-label">En attente</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <span class="material-icons">check_circle</span>
+      </div>
+      <div class="stat-info">
+        <span class="stat-value">{{ deliveredOrders }}</span>
+        <span class="stat-label">Livrées</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon purple">
+        <span class="material-icons">delivery_dining</span>
+      </div>
+      <div class="stat-info">
+        <span class="stat-value">{{ livreurCount }}</span>
+        <span class="stat-label">Livreurs</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="section">
+    <h2 class="section-title">Actions rapides</h2>
+    <div class="actions-grid">
+      <a routerLink="/societes" class="action-card">
+        <span class="material-icons">business</span>
+        <span>Sociétés</span>
+      </a>
+      <a routerLink="/magasins" class="action-card">
+        <span class="material-icons">store</span>
+        <span>Magasins</span>
+      </a>
+      <a routerLink="/depots" class="action-card">
+        <span class="material-icons">warehouse</span>
+        <span>Dépôts</span>
+      </a>
+      <a routerLink="/produits" class="action-card">
+        <span class="material-icons">inventory_2</span>
+        <span>Produits</span>
+      </a>
+      <a routerLink="/livreurs" class="action-card">
+        <span class="material-icons">people</span>
+        <span>Livreurs</span>
+      </a>
+      <a routerLink="/commandes" class="action-card">
+        <span class="material-icons">shopping_cart</span>
+        <span>Commandes</span>
+      </a>
+      <a routerLink="/carte" class="action-card">
+        <span class="material-icons">map</span>
+        <span>Carte</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Recent Orders -->
+  <div class="section">
+    <h2 class="section-title">Commandes récentes</h2>
+    <div class="table-container" *ngIf="!loading">
+      <table *ngIf="recentOrders.length > 0">
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Client</th>
+            <th>Livreur</th>
+            <th>Montant</th>
+            <th>Statut</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let order of recentOrders">
+            <td class="order-num">#{{ order.id }}</td>
+            <td>{{ order.clientNom || '-' }}</td>
+            <td>{{ order.livreurNom || 'Non assigné' }}</td>
+            <td class="amount">{{ order.montantTTC?.toFixed(3) || '0.000' }} TND</td>
+            <td>
+              <span class="status-badge" [ngClass]="getStatusClass(order.status)">
+                {{ getStatusLabel(order.status) }}
+              </span>
+            </td>
+            <td class="date">{{ order.dateCommande | date:'dd/MM/yyyy' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div *ngIf="recentOrders.length === 0" class="empty-state">
+        <span class="material-icons">inbox</span>
+        <p>Aucune commande pour le moment</p>
+      </div>
+    </div>
+    <div *ngIf="loading" class="loading-state">
+      <div class="spinner"></div>
+      <p>Chargement...</p>
+    </div>
+  </div>
+</div>

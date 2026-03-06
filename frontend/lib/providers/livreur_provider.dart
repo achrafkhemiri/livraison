@@ -51,7 +51,7 @@ class LivreurProvider extends ChangeNotifier {
   }
   
   // Create new livreur
-  Future<bool> createLivreur(User livreur) async {
+  Future<bool> createLivreur(User livreur, {String? password, int? societeId}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -66,6 +66,8 @@ class LivreurProvider extends ChangeNotifier {
         'telephone': livreur.telephone,
         'latitude': livreur.latitude,
         'longitude': livreur.longitude,
+        if (password != null && password.isNotEmpty) 'password': password,
+        if (societeId != null) 'societeId': societeId,
       };
       
       final created = await _service.create(livreurData);

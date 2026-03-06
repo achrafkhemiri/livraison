@@ -1,0 +1,399 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Commissions & Paiements</h1>
+    <div class="auto-badge">
+      <span class="material-icons">bolt</span> Commission automatique à la livraison
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab" [class.active]="activeTab === 'summary'" (click)="switchTab('summary')">
+      <span class="material-icons">assessment</span> Résumé par Livreur
+    </button>
+    <button class="tab" [class.active]="activeTab === 'paiements'" (click)="switchTab('paiements')">
+      <span class="material-icons">receipt_long</span> Paiements
+    </button>
+    <button class="tab" [class.active]="activeTab === 'configs'" (click)="switchTab('configs')">
+      <span class="material-icons">settings</span> Configurations
+    </button>
+  </div>
+
+  <!-- Search / Filters -->
+  <div class="filters-bar" *ngIf="activeTab === 'summary'">
+    <input class="search-input" type="text" [(ngModel)]="searchTerm" placeholder="Rechercher livreur...">
+  </div>
+
+  <div class="filters-bar" *ngIf="activeTab === 'paiements'">
+    <input class="search-input" type="text" [(ngModel)]="pSearchTerm" (keyup.enter)="onPSearchChange()" placeholder="Rechercher livreur, commande...">
+    <div class="filter-chips">
+      <button class="chip" [class.active]="pFilterStatus === ''" (click)="onPStatusChange('')">Tous</button>
+      <button class="chip" [class.active]="pFilterStatus === 'en_attente'" (click)="onPStatusChange('en_attente')">En attente</button>
+      <button class="chip" [class.active]="pFilterStatus === 'paye'" (click)="onPStatusChange('paye')">Validés</button>
+    </div>
+  </div>
+  <div class="filters-bar" *ngIf="activeTab === 'paiements'">
+    <select class="page-size-select" [(ngModel)]="pPageSize" (change)="onPPageSizeChange()">
+      <option [ngValue]="5">5 / page</option>
+      <option [ngValue]="10">10 / page</option>
+      <option [ngValue]="25">25 / page</option>
+      <option [ngValue]="50">50 / page</option>
+    </select>
+    <span class="page-info" *ngIf="!loading">{{ pTotalElements }} paiement(s)</span>
+  </div>
+
+  <div class="filters-bar" *ngIf="activeTab === 'configs'">
+    <input class="search-input" type="text" [(ngModel)]="cSearchTerm" (keyup.enter)="onCSearchChange()" placeholder="Rechercher livreur...">
+  </div>
+  <div class="filters-bar" *ngIf="activeTab === 'configs'">
+    <select class="page-size-select" [(ngModel)]="cPageSize" (change)="onCPageSizeChange()">
+      <option [ngValue]="5">5 / page</option>
+      <option [ngValue]="10">10 / page</option>
+      <option [ngValue]="25">25 / page</option>
+      <option [ngValue]="50">50 / page</option>
+    </select>
+    <span class="page-info" *ngIf="!loading">{{ cTotalElements }} configuration(s)</span>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="loading-state"><div class="spinner"></div><p>Chargement...</p></div>
+
+  <!-- ═══ TAB: Summary ═══ -->
+  <div *ngIf="!loading && activeTab === 'summary'">
+    <div *ngIf="filteredSummaries.length === 0" class="empty-state">
+      <span class="material-icons">people</span><p>Aucun livreur trouvé</p>
+    </div>
+    <div class="card-grid" *ngIf="filteredSummaries.length > 0">
+      <div class="entity-card" *ngFor="let s of filteredSummaries" (click)="openDetail(s)" style="cursor:pointer">
+        <div class="card-header">
+          <div class="card-icon blue">
+            <span class="material-icons">person</span>
+          </div>
+          <div class="card-title">
+            <h3>{{ s.livreurNom }}</h3>
+            <span class="card-subtitle">{{ s.commandesLivrees }} / {{ s.totalCommandes }} commandes livrées</span>
+          </div>
+          <span class="status-dot" [class.active]="s.configActuelle" [class.inactive]="!s.configActuelle"
+                [title]="s.configActuelle ? 'Config active' : 'Pas de config'"></span>
+        </div>
+        <div class="card-body">
+          <div class="summary-stats">
+            <div class="stat-item">
+              <span class="stat-label">Total Commission</span>
+              <span class="stat-value primary">{{ s.totalCommission | number:'1.3-3' }} TND</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Payé</span>
+              <span class="stat-value success">{{ s.totalPaye | number:'1.3-3' }} TND</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Non Payé</span>
+              <span class="stat-value danger">{{ s.totalNonPaye | number:'1.3-3' }} TND</span>
+            </div>
+          </div>
+          <div class="info-row">
+            <span class="material-icons">check_circle</span>
+            <span>{{ s.paiementsValides }} validés / {{ s.paiementsEnAttente }} en attente</span>
+          </div>
+          <div class="info-row" *ngIf="s.configActuelle">
+            <span class="material-icons">tune</span>
+            <span>Fixe: {{ s.configActuelle.montantFixe }} | /km: {{ s.configActuelle.prixParKm }} | Bonus: {{ s.configActuelle.bonus }}
+              <span *ngIf="s.configActuelle.inclureDistanceCollection" style="color:#2E7D32"> | +Collection</span>
+            </span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon" title="Voir détails" (click)="openDetail(s); $event.stopPropagation()">
+            <span class="material-icons">visibility</span>
+          </button>
+          <button class="btn-icon" title="Configurer commission"
+                  (click)="openConfigCreate(s.livreurId, s.livreurNom); $event.stopPropagation()">
+            <span class="material-icons">settings</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Paiements ═══ -->
+  <div class="table-container" *ngIf="!loading && activeTab === 'paiements'">
+    <div style="display:flex;justify-content:flex-end;padding:12px 16px">
+      <button class="btn-primary" (click)="recalculateDistances()" [disabled]="recalculating">
+        <span class="material-icons">refresh</span>
+        {{ recalculating ? 'Recalcul en cours...' : 'Recalculer les distances' }}
+      </button>
+    </div>
+    <table *ngIf="paiements.length > 0">
+        <thead>
+          <tr>
+            <th>Commande</th>
+            <th>Livreur</th>
+            <th>Dist. Livraison</th>
+            <th>Dist. Collection</th>
+            <th>Total Distance</th>
+            <th>Formule</th>
+            <th>Total</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let p of paiements">
+            <td><strong>#{{ p.orderId }}</strong></td>
+            <td>{{ p.livreurNom }}</td>
+            <td>{{ p.distanceLivraisonKm | number:'1.1-1' }} km</td>
+            <td>
+              <span *ngIf="p.distanceCollectionKm && p.distanceCollectionKm > 0">{{ p.distanceCollectionKm | number:'1.1-1' }} km</span>
+              <span *ngIf="!p.distanceCollectionKm || p.distanceCollectionKm === 0" class="text-muted">—</span>
+            </td>
+            <td><strong>{{ p.distanceKm | number:'1.1-1' }} km</strong></td>
+            <td class="formula-cell">
+              <span class="formula">{{ p.montantFixe }} + ({{ p.distanceKm | number:'1.1-1' }} × {{ p.prixParKm }}) + {{ p.bonus }}</span>
+            </td>
+            <td><strong>{{ p.montantTotal | number:'1.3-3' }} TND</strong></td>
+            <td>
+              <span class="status-badge" [ngClass]="getPaymentStatusClass(p)">{{ getPaymentStatusLabel(p) }}</span>
+            </td>
+            <td>
+              <div style="display:flex;gap:4px">
+                <button class="btn-icon" [class.checked]="p.livreurPaye" title="Livreur a payé"
+                        (click)="toggleLivreurPaye(p)">
+                  <span class="material-icons">{{ p.livreurPaye ? 'paid' : 'money_off' }}</span>
+                </button>
+                <button class="btn-icon" [class.checked]="p.adminValide" title="Admin validé"
+                        (click)="toggleAdminValide(p)">
+                  <span class="material-icons">{{ p.adminValide ? 'verified' : 'pending' }}</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    <div *ngIf="paiements.length === 0" class="empty-state"><span class="material-icons">receipt_long</span><p>Aucun paiement trouvé</p></div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="pTotalPages > 1">
+      <button (click)="onPPageChange(0)" [disabled]="pCurrentPage === 0"><span class="material-icons">first_page</span></button>
+      <button (click)="onPPageChange(pCurrentPage - 1)" [disabled]="pCurrentPage === 0"><span class="material-icons">chevron_left</span></button>
+      <button *ngFor="let p of getPPageNumbers()" (click)="onPPageChange(p)" [class.active]="p === pCurrentPage">{{ p + 1 }}</button>
+      <button (click)="onPPageChange(pCurrentPage + 1)" [disabled]="pCurrentPage >= pTotalPages - 1"><span class="material-icons">chevron_right</span></button>
+      <button (click)="onPPageChange(pTotalPages - 1)" [disabled]="pCurrentPage >= pTotalPages - 1"><span class="material-icons">last_page</span></button>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Configs ═══ -->
+  <div class="table-container" *ngIf="!loading && activeTab === 'configs'">
+    <table *ngIf="configs.length > 0">
+        <thead>
+          <tr>
+            <th>Livreur</th>
+            <th>Montant Fixe</th>
+            <th>Prix / km</th>
+            <th>Bonus</th>
+            <th>Dist. Collection</th>
+            <th>Depuis</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let c of configs">
+            <td><strong>{{ c.livreurNom }}</strong></td>
+            <td>{{ c.montantFixe | number:'1.3-3' }} TND</td>
+            <td>{{ c.prixParKm | number:'1.3-3' }} TND</td>
+            <td>{{ c.bonus | number:'1.3-3' }} TND</td>
+            <td>
+              <span class="status-badge" [ngClass]="c.inclureDistanceCollection ? 'status-delivered' : 'status-pending'">
+                {{ c.inclureDistanceCollection ? 'Incluse' : 'Non incluse' }}
+              </span>
+            </td>
+            <td>{{ c.dateDebut | date:'dd/MM/yyyy' }}</td>
+            <td>
+              <div style="display:flex;gap:4px">
+                <button class="btn-icon" title="Modifier" (click)="openConfigEdit(c)">
+                  <span class="material-icons">edit</span>
+                </button>
+                <button class="btn-icon danger" title="Désactiver" (click)="deactivateConfig(c)">
+                  <span class="material-icons">block</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    <div *ngIf="configs.length === 0" class="empty-state"><span class="material-icons">settings</span><p>Aucune configuration active</p></div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="cTotalPages > 1">
+      <button (click)="onCPageChange(0)" [disabled]="cCurrentPage === 0"><span class="material-icons">first_page</span></button>
+      <button (click)="onCPageChange(cCurrentPage - 1)" [disabled]="cCurrentPage === 0"><span class="material-icons">chevron_left</span></button>
+      <button *ngFor="let p of getCPageNumbers()" (click)="onCPageChange(p)" [class.active]="p === cCurrentPage">{{ p + 1 }}</button>
+      <button (click)="onCPageChange(cCurrentPage + 1)" [disabled]="cCurrentPage >= cTotalPages - 1"><span class="material-icons">chevron_right</span></button>
+      <button (click)="onCPageChange(cTotalPages - 1)" [disabled]="cCurrentPage >= cTotalPages - 1"><span class="material-icons">last_page</span></button>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: Detail Livreur ═══ -->
+  <div class="modal-overlay" *ngIf="showDetail" (click)="closeDetail()">
+    <div class="modal modal-lg" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ selectedSummary?.livreurNom }} – Détails Commission</h2>
+        <button class="btn-icon" (click)="closeDetail()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body" *ngIf="selectedSummary">
+        <!-- Stats row -->
+        <div class="detail-stats">
+          <div class="detail-stat blue">
+            <span class="detail-stat-value">{{ selectedSummary.totalCommandes }}</span>
+            <span class="detail-stat-label">Commandes</span>
+          </div>
+          <div class="detail-stat green">
+            <span class="detail-stat-value">{{ selectedSummary.commandesLivrees }}</span>
+            <span class="detail-stat-label">Livrées</span>
+          </div>
+          <div class="detail-stat purple">
+            <span class="detail-stat-value">{{ selectedSummary.totalCommission | number:'1.3-3' }}</span>
+            <span class="detail-stat-label">Total (TND)</span>
+          </div>
+          <div class="detail-stat orange">
+            <span class="detail-stat-value">{{ selectedSummary.totalNonPaye | number:'1.3-3' }}</span>
+            <span class="detail-stat-label">Non payé (TND)</span>
+          </div>
+        </div>
+
+        <!-- Config actuelle -->
+        <div class="detail-section" *ngIf="selectedSummary.configActuelle">
+          <h3>Configuration Actuelle</h3>
+          <div class="config-display">
+            <span>Fixe: <strong>{{ selectedSummary.configActuelle.montantFixe }} TND</strong></span>
+            <span>Par km: <strong>{{ selectedSummary.configActuelle.prixParKm }} TND</strong></span>
+            <span>Bonus: <strong>{{ selectedSummary.configActuelle.bonus }} TND</strong></span>
+          </div>
+        </div>
+        <div class="detail-section" *ngIf="!selectedSummary.configActuelle">
+          <h3>Configuration</h3>
+          <p class="text-muted">Aucune configuration active.
+            <a href="javascript:void(0)" (click)="openConfigCreate(selectedSummary.livreurId, selectedSummary.livreurNom)">
+              Créer une configuration
+            </a>
+          </p>
+        </div>
+
+        <!-- Paiements list -->
+        <div class="detail-section">
+          <h3>Historique Paiements ({{ dTotalElements }})</h3>
+          <div class="filters-bar" style="margin-bottom:8px">
+            <input class="search-input" type="text" [(ngModel)]="dSearchTerm" (keyup.enter)="onDSearchChange()" placeholder="Rechercher commande..." style="width:200px">
+            <div class="filter-chips">
+              <button class="chip" [class.active]="dFilterStatus === ''" (click)="onDStatusChange('')">Tous</button>
+              <button class="chip" [class.active]="dFilterStatus === 'en_attente'" (click)="onDStatusChange('en_attente')">En attente</button>
+              <button class="chip" [class.active]="dFilterStatus === 'paye'" (click)="onDStatusChange('paye')">Validés</button>
+            </div>
+          </div>
+          <div class="filters-bar" style="margin-bottom:8px">
+            <select class="page-size-select" [(ngModel)]="dPageSize" (change)="onDPageSizeChange()">
+              <option [ngValue]="5">5 / page</option>
+              <option [ngValue]="10">10 / page</option>
+              <option [ngValue]="25">25 / page</option>
+            </select>
+            <span class="page-info">{{ dTotalElements }} paiement(s)</span>
+          </div>
+          <div *ngIf="detailLoading" class="loading-state"><div class="spinner"></div></div>
+          <div *ngIf="!detailLoading && detailPaiements.length === 0" class="text-muted">Aucun paiement</div>
+          <div class="detail-table-container" *ngIf="!detailLoading && detailPaiements.length > 0">
+            <table class="detail-table">
+              <thead>
+                <tr>
+                  <th>Commande</th>
+                  <th>Montant</th>
+                  <th>Dist. Livr.</th>
+                  <th>Dist. Coll.</th>
+                  <th>Total Dist.</th>
+                  <th>Livreur Payé</th>
+                  <th>Admin Validé</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let p of detailPaiements">
+                  <td>#{{ p.orderId }}</td>
+                  <td><strong>{{ p.montantTotal | number:'1.3-3' }} TND</strong></td>
+                  <td>{{ p.distanceLivraisonKm | number:'1.1-1' }} km</td>
+                  <td>
+                    <span *ngIf="p.distanceCollectionKm && p.distanceCollectionKm > 0">{{ p.distanceCollectionKm | number:'1.1-1' }} km</span>
+                    <span *ngIf="!p.distanceCollectionKm || p.distanceCollectionKm === 0">—</span>
+                  </td>
+                  <td>{{ p.distanceKm | number:'1.1-1' }} km</td>
+                  <td>
+                    <span class="material-icons" [style.color]="p.livreurPaye ? '#4CAF50' : '#ccc'">
+                      {{ p.livreurPaye ? 'check_circle' : 'cancel' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="material-icons" [style.color]="p.adminValide ? '#4CAF50' : '#ccc'">
+                      {{ p.adminValide ? 'check_circle' : 'cancel' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Pagination Detail -->
+          <div class="pagination" *ngIf="dTotalPages > 1" style="margin-top:8px">
+            <button (click)="onDPageChange(0)" [disabled]="dCurrentPage === 0"><span class="material-icons">first_page</span></button>
+            <button (click)="onDPageChange(dCurrentPage - 1)" [disabled]="dCurrentPage === 0"><span class="material-icons">chevron_left</span></button>
+            <button *ngFor="let p of getDPageNumbers()" (click)="onDPageChange(p)" [class.active]="p === dCurrentPage">{{ p + 1 }}</button>
+            <button (click)="onDPageChange(dCurrentPage + 1)" [disabled]="dCurrentPage >= dTotalPages - 1"><span class="material-icons">chevron_right</span></button>
+            <button (click)="onDPageChange(dTotalPages - 1)" [disabled]="dCurrentPage >= dTotalPages - 1"><span class="material-icons">last_page</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: Config Form ═══ -->  <div class="modal-overlay" *ngIf="showConfigForm" (click)="closeConfigForm()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ editingConfig ? 'Modifier' : 'Nouvelle' }} Configuration Commission</h2>
+        <button class="btn-icon" (click)="closeConfigForm()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" *ngIf="configLivreurNom">
+          <label>Livreur</label>
+          <input type="text" [value]="configLivreurNom" disabled>
+        </div>
+        <div class="form-group" *ngIf="!configLivreurNom">
+          <label>ID Livreur *</label>
+          <input type="number" [(ngModel)]="configForm.livreurId" placeholder="ID du livreur">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Montant Fixe (TND)</label>
+            <input type="number" [(ngModel)]="configForm.montantFixe" placeholder="0.000" step="0.001" min="0">
+          </div>
+          <div class="form-group">
+            <label>Prix par km (TND)</label>
+            <input type="number" [(ngModel)]="configForm.prixParKm" placeholder="0.000" step="0.001" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Bonus (TND)</label>
+          <input type="number" [(ngModel)]="configForm.bonus" placeholder="0.000" step="0.001" min="0">
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" [(ngModel)]="configForm.inclureDistanceCollection">
+            Inclure la distance de collection
+          </label>
+          <small class="form-hint">Si coché, la distance de collecte est ajoutée au calcul. La livraison est toujours calculée.</small>
+        </div>
+        <div class="formula-preview">
+          <span class="material-icons">functions</span>
+          Formule: <strong>{{ configForm.montantFixe || 0 }} + (distance × {{ configForm.prixParKm || 0 }}) + {{ configForm.bonus || 0 }}</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closeConfigForm()">Annuler</button>
+        <button class="btn-primary" (click)="saveConfig()">{{ editingConfig ? 'Modifier' : 'Créer' }}</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,176 @@
+﻿node : - Generating browser application bundles (phase: setup)...
+Au caractère Ligne:1 : 63
++ ... t-angular"; node node_modules/@angular/cli/bin/ng.js build 2>&1 | Out ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (- Generating br...hase: setup)... 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Ô£ö Browser application bundle generation complete.
+Ô£ö Browser application bundle generation complete.
+- Copying assets...
+Ô£ö Copying assets complete.
+- Generating index html...
+Ô£ö Index html generation complete.
+
+Initial Chunk Files           | Names         |  Raw Size | Estimated Transfer Size
+main.4ddf8e6bdd5b9d8f.js      | main          | 665.63 kB |               144.87 kB
+polyfills.41a3e530e44cf784.js | polyfills     |  33.03 kB |                10.65 kB
+styles.dc4a036df7680232.css   | styles        |  11.08 kB |                 2.47 kB
+runtime.cffb9fed0e22495c.js   | runtime       | 919 bytes |               510 bytes
+
+| Initial Total | 710.63 kB |               158.49 kB
+
+Build at: 2026-03-03T09:51:28.627Z - Hash: c042db16a67380db - Time: 55070ms
+
+Warning: src/app/pages/commandes/commandes.component.html:183:73 - warning 
+NG8107: The left side of this optional chain operation does not include 'null' 
+or 'undefined' in its type, therefore the '?.' operator can be replaced with 
+the '.' operator.
+
+183               <span style="color:#1A237E;font-weight:600;">{{ 
+p.prixHT?.toFixed(3) }} TND</span>
+                                                                            
+~~~~~~~
+
+  src/app/pages/commandes/commandes.component.ts:14:16
+    14   templateUrl: './commandes.component.html',
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component CommandesComponent.
+
+
+Warning: src/app/pages/depots/depots.component.html:25:131 - warning NG8107: 
+The left side of this optional chain operation does not include 'null' or 
+'undefined' in its type, therefore the '?.' operator can be replaced with the 
+'.' operator.
+
+25         <div class="info-row" *ngIf="d.latitude && d.longitude"><span 
+class="material-icons">gps_fixed</span><span>{{ d.latitude?.toFixed(4) }}, {{ 
+d.longitude?.toFixed(4) }}</span></div>
+                                                                               
+                                                      ~~~~~~~
+
+  src/app/pages/depots/depots.component.ts:10:16
+    10   templateUrl: './depots.component.html',
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component DepotsComponent.
+
+
+Warning: src/app/pages/depots/depots.component.html:25:162 - warning NG8107: 
+The left side of this optional chain operation does not include 'null' or 
+'undefined' in its type, therefore the '?.' operator can be replaced with the 
+'.' operator.
+
+25         <div class="info-row" *ngIf="d.latitude && d.longitude"><span 
+class="material-icons">gps_fixed</span><span>{{ d.latitude?.toFixed(4) }}, {{ 
+d.longitude?.toFixed(4) }}</span></div>
+                                                                               
+                                                                               
+      ~~~~~~~
+
+  src/app/pages/depots/depots.component.ts:10:16
+    10   templateUrl: './depots.component.html',
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component DepotsComponent.
+
+
+Warning: src/app/pages/magasins/magasins.component.html:26:131 - warning 
+NG8107: The left side of this optional chain operation does not include 'null' 
+or 'undefined' in its type, therefore the '?.' operator can be replaced with 
+the '.' operator.
+
+26         <div class="info-row" *ngIf="m.latitude && m.longitude"><span 
+class="material-icons">gps_fixed</span><span>{{ m.latitude?.toFixed(4) }}, {{ 
+m.longitude?.toFixed(4) }}</span></div>
+                                                                               
+                                                      ~~~~~~~
+
+  src/app/pages/magasins/magasins.component.ts:10:16
+    10   templateUrl: './magasins.component.html',
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component MagasinsComponent.
+
+
+Warning: src/app/pages/magasins/magasins.component.html:26:162 - warning 
+NG8107: The left side of this optional chain operation does not include 'null' 
+or 'undefined' in its type, therefore the '?.' operator can be replaced with 
+the '.' operator.
+
+26         <div class="info-row" *ngIf="m.latitude && m.longitude"><span 
+class="material-icons">gps_fixed</span><span>{{ m.latitude?.toFixed(4) }}, {{ 
+m.longitude?.toFixed(4) }}</span></div>
+                                                                               
+                                                                               
+      ~~~~~~~
+
+  src/app/pages/magasins/magasins.component.ts:10:16
+    10   templateUrl: './magasins.component.html',
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component MagasinsComponent.
+
+
+Warning: src/app/pages/produits/produits.component.html:30:28 - warning 
+NG8107: The left side of this optional chain operation does not include 'null' 
+or 'undefined' in its type, therefore the '?.' operator can be replaced with 
+the '.' operator.
+
+30           <td>{{ p.prixHT?.toFixed(3) }} TND</td>
+                              ~~~~~~~
+
+  src/app/pages/produits/produits.component.ts:7:16
+    7   templateUrl: './produits.component.html',
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component ProduitsComponent.
+
+
+Warning: src/app/pages/produits/produits.component.html:31:55 - warning 
+NG8107: The left side of this optional chain operation does not include 'null' 
+or 'undefined' in its type, therefore the '?.' operator can be replaced with 
+the '.' operator.
+
+31           <td style="font-weight: 600;">{{ p.prixTTC?.toFixed(3) }} TND</td>
+                                                         ~~~~~~~
+
+  src/app/pages/produits/produits.component.ts:7:16
+    7   templateUrl: './produits.component.html',
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component ProduitsComponent.
+
+
+Warning: src/app/pages/societes/societes.component.html:40:32 - warning 
+NG8107: The left side of this optional chain operation does not include 'null' 
+or 'undefined' in its type, therefore the '?.' operator can be replaced with 
+the '.' operator.
+
+40           <span>{{ s.latitude?.toFixed(4) }}, {{ s.longitude?.toFixed(4) 
+}}</span>
+                                  ~~~~~~~
+
+  src/app/pages/societes/societes.component.ts:7:16
+    7   templateUrl: './societes.component.html',
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component SocietesComponent.
+
+
+Warning: src/app/pages/societes/societes.component.html:40:63 - warning 
+NG8107: The left side of this optional chain operation does not include 'null' 
+or 'undefined' in its type, therefore the '?.' operator can be replaced with 
+the '.' operator.
+
+40           <span>{{ s.latitude?.toFixed(4) }}, {{ s.longitude?.toFixed(4) 
+}}</span>
+                                                                 ~~~~~~~
+
+  src/app/pages/societes/societes.component.ts:7:16
+    7   templateUrl: './societes.component.html',
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Error occurs in the template of component SocietesComponent.
+
+
+Warning: C:\Users\USER\Desktop\Nouveau dossier 
+(2)\front-angular\src\app\pages\carte\carte.component.ts depends on 'leaflet'. 
+CommonJS or AMD dependencies can cause optimization bailouts.
+For more info see: 
+https://angular.io/guide/build#configuring-commonjs-dependencies
+
+

@@ -8,6 +8,7 @@ import com.example.backend.exception.ResourceNotFoundException;
 import com.example.backend.mapper.OrderMapper;
 import com.example.backend.model.*;
 import com.example.backend.repository.*;
+import com.example.backend.service.CommissionService;
 import com.example.backend.service.NotificationService;
 import com.example.backend.service.OrderService;
 import jakarta.persistence.criteria.Join;
@@ -44,6 +45,7 @@ public class OrderServiceImpl implements OrderService {
     private final ProduitRepository produitRepository;
     private final OrderMapper orderMapper;
     private final NotificationService notificationService;
+    private final CommissionService commissionService;
     
     @Override
     @Transactional(readOnly = true)
@@ -293,7 +295,7 @@ public class OrderServiceImpl implements OrderService {
     }
     
     @Override
-    public OrderDTO updateStatus(Long id, String status) {
+    public OrderDTO updateStatus(Long id, String status, java.math.BigDecimal distanceKm) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Commande", "id", id));
         
@@ -301,9 +303,43 @@ public class OrderServiceImpl implements OrderService {
         
         if ("delivered".equals(status)) {
             order.setDateLivraisonEffective(LocalDateTime.now());
+            
+            // Auto-generate commission when order is delivered
+            // Use distance from Flutter (OSRM) if provided, otherwise backend calculates via OSRM
+            if (order.getLivreur() != null) {
+                try {
+                    commissionService.generateCommission(id, distanceKm);
+                } catch (Exception e) {
+                    // Commission already exists or config missing — don't block status update
+                    // Log silently
+                }
+            }
         }
         
         order = orderRepository.save(order);
+        
+        // Notify gérants when order is delivered
+        if ("delivered".equals(status) && order.getSocieteId() != null) {
+            String livreurName = "";
+            Long livreurId = null;
+            if (order.getLivreur() != null) {
+                livreurName = (order.getLivreur().getNom() + " " + order.getLivreur().getPrenom()).trim();
+                livreurId = order.getLivreur().getId();
+            }
+            List<Utilisateur> gerants = utilisateurRepository.findByRoleAndActifTrue(Role.GERANT);
+            for (Utilisateur gerant : gerants) {
+                if (gerant.getSociete() != null && gerant.getSociete().getId().equals(order.getSocieteId())) {
+                    notificationService.create(
+                            gerant.getId(),
+                            "ORDER_DELIVERED",
+                            "La commande #" + order.getId() + " a été livrée" + (livreurName.isEmpty() ? "." : " par " + livreurName + "."),
+                            id,
+                            livreurId
+                    );
+                }
+            }
+        }
+        
         return orderMapper.toDTO(order);
     }
     
@@ -330,7 +366,7 @@ public class OrderServiceImpl implements OrderService {
         notificationService.create(
                 livreurId,
                 "ORDER_PROPOSED",
-                "La commande #" + order.getNumero() + " vous a été proposée. Veuillez accepter ou refuser.",
+                "La commande #" + order.getId() + " vous a été proposée. Veuillez accepter ou refuser.",
                 orderId,
                 livreurId
         );
@@ -343,7 +379,7 @@ public class OrderServiceImpl implements OrderService {
                     notificationService.create(
                             gerant.getId(),
                             "ORDER_ASSIGNED",
-                            "Commande #" + order.getNumero() + " proposée à " + livreurName + ". En attente de réponse.",
+                            "Commande #" + order.getId() + " proposée à " + livreurName + ". En attente de réponse.",
                             orderId,
                             livreurId
                     );
@@ -385,7 +421,7 @@ public class OrderServiceImpl implements OrderService {
                     notificationService.create(
                             gerant.getId(),
                             "ORDER_ACCEPTED",
-                            livreurName + " a accepté la commande #" + order.getNumero() + ".",
+                            livreurName + " a accepté la commande #" + order.getId() + ".",
                             orderId,
                             livreurId
                     );
@@ -429,7 +465,7 @@ public class OrderServiceImpl implements OrderService {
                     notificationService.create(
                             gerant.getId(),
                             "ORDER_REJECTED",
-                            livreurName + " a refusé la commande #" + order.getNumero() + ". Veuillez réassigner.",
+                            livreurName + " a refusé la commande #" + order.getId() + ". Veuillez réassigner.",
                             orderId,
                             livreurId
                     );
@@ -463,6 +499,29 @@ public class OrderServiceImpl implements OrderService {
         order.setCollected(true);
         order.setDateCollection(LocalDateTime.now());
         order = orderRepository.save(order);
+        
+        // Notify gérants when order is collected
+        if (order.getSocieteId() != null) {
+            String livreurName = "";
+            Long livreurId = null;
+            if (order.getLivreur() != null) {
+                livreurName = (order.getLivreur().getNom() + " " + order.getLivreur().getPrenom()).trim();
+                livreurId = order.getLivreur().getId();
+            }
+            List<Utilisateur> gerants = utilisateurRepository.findByRoleAndActifTrue(Role.GERANT);
+            for (Utilisateur gerant : gerants) {
+                if (gerant.getSociete() != null && gerant.getSociete().getId().equals(order.getSocieteId())) {
+                    notificationService.create(
+                            gerant.getId(),
+                            "ORDER_COLLECTED",
+                            "La commande #" + order.getId() + " a été collectée" + (livreurName.isEmpty() ? "." : " par " + livreurName + "."),
+                            orderId,
+                            livreurId
+                    );
+                }
+            }
+        }
+        
         return orderMapper.toDTO(order);
     }
     

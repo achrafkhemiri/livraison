@@ -1,0 +1,326 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Commandes</h1>
+    <button class="btn-primary" (click)="openCreateForm()"><span class="material-icons">add</span> Nouvelle Commande</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-bar">
+    <input type="text" class="search-input" [(ngModel)]="searchTerm" (keyup.enter)="onSearchChange()" placeholder="Rechercher par numéro, client, livreur...">
+    <div class="filter-chips">
+      <button *ngFor="let s of statusOptions" class="chip" [class.active]="statusFilter === s.value" (click)="onStatusChange(s.value)">{{ s.label }}</button>
+    </div>
+  </div>
+
+  <div class="filters-bar">
+    <div class="form-group" style="margin:0;">
+      <label style="font-size:12px;">Du</label>
+      <input type="date" [(ngModel)]="dateFrom" (change)="onSearchChange()" style="padding:8px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:13px;">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label style="font-size:12px;">Au</label>
+      <input type="date" [(ngModel)]="dateTo" (change)="onSearchChange()" style="padding:8px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:13px;">
+    </div>
+    <span class="page-info" *ngIf="!loading">{{ totalElements }} commande(s)</span>
+  </div>
+
+  <!-- Orders Table -->
+  <div class="table-container" *ngIf="!loading">
+    <table *ngIf="orders.length > 0">
+      <thead>
+        <tr>
+          <th>N°</th>
+          <th>Date</th>
+          <th>Client</th>
+          <th>Livreur</th>
+          <th>Montant TTC</th>
+          <th>Statut</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let o of orders" style="cursor:pointer;" (click)="openDetail(o)">
+          <td style="font-weight:600;color:#1A237E;">#{{ o.id }}</td>
+          <td>{{ o.dateCommande | date:'dd/MM/yyyy' }}</td>
+          <td>{{ o.clientNom || '-' }}</td>
+          <td>{{ o.livreurNom || 'Non assigné' }}</td>
+          <td style="font-weight:600;">{{ o.montantTTC?.toFixed(3) || '0.000' }} TND</td>
+          <td><span class="status-badge" [ngClass]="getStatusClass(o.status)">{{ getStatusLabel(o.status) }}</span></td>
+          <td (click)="$event.stopPropagation()">
+            <div style="display:flex;gap:4px;">
+              <button *ngIf="o.status === 'pending' || o.status === 'assigned'" class="btn-icon" title="Assigner livreur" (click)="openAssignModal(o)"><span class="material-icons">person_add</span></button>
+              <button *ngIf="canChangeStatus(o, 'processing')" class="btn-icon" title="Traitement" (click)="changeStatus(o, 'processing')"><span class="material-icons">play_arrow</span></button>
+              <button *ngIf="canChangeStatus(o, 'shipped')" class="btn-icon" title="Expédier" (click)="changeStatus(o, 'shipped')"><span class="material-icons">local_shipping</span></button>
+              <button *ngIf="canChangeStatus(o, 'delivered')" class="btn-icon" title="Livrée" (click)="changeStatus(o, 'delivered')"><span class="material-icons">check_circle</span></button>
+              <button *ngIf="canChangeStatus(o, 'cancelled')" class="btn-icon danger" title="Annuler" (click)="changeStatus(o, 'cancelled')"><span class="material-icons">cancel</span></button>
+              <button class="btn-icon danger" title="Supprimer" (click)="deleteOrder(o)"><span class="material-icons">delete</span></button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div *ngIf="orders.length === 0" class="empty-state"><span class="material-icons">shopping_cart</span><p>Aucune commande trouvée</p></div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="totalPages > 1">
+      <button (click)="onPageChange(0)" [disabled]="currentPage === 0"><span class="material-icons">first_page</span></button>
+      <button (click)="onPageChange(currentPage - 1)" [disabled]="currentPage === 0"><span class="material-icons">chevron_left</span></button>
+      <button *ngFor="let p of getPageNumbers()" (click)="onPageChange(p)" [class.active]="p === currentPage">{{ p + 1 }}</button>
+      <button (click)="onPageChange(currentPage + 1)" [disabled]="currentPage >= totalPages - 1"><span class="material-icons">chevron_right</span></button>
+      <button (click)="onPageChange(totalPages - 1)" [disabled]="currentPage >= totalPages - 1"><span class="material-icons">last_page</span></button>
+    </div>
+  </div>
+  <div *ngIf="loading" class="loading-state"><div class="spinner"></div><p>Chargement...</p></div>
+
+  <!-- Order Detail Modal -->
+  <div class="modal-overlay" *ngIf="showDetail" (click)="closeDetail()">
+    <div class="modal" style="max-width:640px;" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Commande #{{ selectedOrder?.id }}</h2>
+        <button class="btn-icon" (click)="closeDetail()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body" *ngIf="selectedOrder">
+        <div class="detail-section">
+          <h4>Informations</h4>
+          <div class="info-row"><span class="material-icons">calendar_today</span><span>{{ selectedOrder.dateCommande | date:'dd/MM/yyyy HH:mm' }}</span></div>
+          <div class="info-row"><span class="material-icons">person</span><span>Client: {{ selectedOrder.clientNom || '-' }}</span></div>
+          <div class="info-row"><span class="material-icons">delivery_dining</span><span>Livreur: {{ selectedOrder.livreurNom || 'Non assigné' }}</span></div>
+          <div class="info-row"><span class="material-icons">location_on</span><span>{{ selectedOrder.adresseLivraison || '-' }}</span></div>
+          <div class="info-row" *ngIf="selectedOrder.notes"><span class="material-icons">notes</span><span>{{ selectedOrder.notes }}</span></div>
+        </div>
+
+        <div class="detail-section">
+          <h4>Statut</h4>
+          <span class="status-badge" [ngClass]="getStatusClass(selectedOrder.status)">{{ getStatusLabel(selectedOrder.status) }}</span>
+        </div>
+
+        <div class="detail-section">
+          <h4>Montants</h4>
+          <div class="amounts-grid">
+            <div><span>HT</span><strong>{{ selectedOrder.montantHT?.toFixed(3) || '0.000' }} TND</strong></div>
+            <div><span>TVA</span><strong>{{ selectedOrder.montantTVA?.toFixed(3) || '0.000' }} TND</strong></div>
+            <div><span>TTC</span><strong>{{ selectedOrder.montantTTC?.toFixed(3) || '0.000' }} TND</strong></div>
+          </div>
+        </div>
+
+        <div class="detail-section" *ngIf="selectedOrder.items && selectedOrder.items.length > 0">
+          <h4>Articles ({{ selectedOrder.items.length }})</h4>
+          <div class="order-items">
+            <div class="order-item" *ngFor="let item of selectedOrder.items">
+              <div class="item-info">
+                <span class="item-name">{{ item.produitDesignation || item.produitNom || 'Produit #' + item.produitId }}</span>
+                <span class="item-ref">{{ item.produitCode }}</span>
+              </div>
+              <div class="item-qty">x{{ item.quantite }}</div>
+              <div class="item-price">{{ item.montantTTC?.toFixed(3) || ((item.prixUnitaireTTC || 0) * item.quantite).toFixed(3) }} TND</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign Livreur Modal -->
+  <div class="modal-overlay" *ngIf="showAssignModal" (click)="showAssignModal = false">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Assigner un livreur</h2>
+        <button class="btn-icon" (click)="showAssignModal = false"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body">
+        <div *ngIf="loadingRecommendations" class="loading-state"><div class="spinner"></div><p>Recherche des livreurs recommandés...</p></div>
+        <div *ngIf="!loadingRecommendations && recommendedLivreurs.length === 0" class="empty-state"><p>Aucun livreur disponible</p></div>
+        <div *ngIf="!loadingRecommendations" class="livreur-list">
+          <div class="livreur-option" *ngFor="let rec of recommendedLivreurs" (click)="assignLivreur(rec.livreurId || rec.livreur?.id || rec.id)">
+            <div class="livreur-info">
+              <div class="avatar-small">{{ getLivreurInitial(rec) }}</div>
+              <div>
+                <div class="livreur-name">{{ getLivreurName(rec) }}</div>
+                <div class="livreur-detail" *ngIf="rec.distanceTotaleKm">{{ rec.distanceTotaleKm }} km</div>
+                <div class="livreur-detail" *ngIf="rec.tempsEstimeMinutes">~{{ rec.tempsEstimeMinutes }} min</div>
+                <div class="livreur-detail" *ngIf="rec.commandesActives !== undefined">{{ rec.commandesActives }} commande(s) active(s)</div>
+                <div class="livreur-detail" *ngIf="rec.telephone">{{ rec.telephone }}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span *ngIf="rec.recommended" class="status-badge status-delivered" style="font-size:11px;">Recommandé</span>
+              <span class="material-icons" style="color:#1A237E;">arrow_forward</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Order Modal -->
+  <div class="modal-overlay" *ngIf="showCreateForm" (click)="closeCreateForm()">
+    <div class="modal" style="max-width:680px;" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Nouvelle Commande</h2>
+        <button class="btn-icon" (click)="closeCreateForm()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Client (from /api/users) -->
+        <div class="form-group">
+          <label>Client *</label>
+          <div *ngIf="loadingClients" class="loading-inline"><div class="spinner-sm"></div> Chargement...</div>
+          <select *ngIf="!loadingClients" (change)="onClientSelect(+$any($event.target).value)">
+            <option value="">-- Sélectionner un client --</option>
+            <option *ngFor="let c of clients" [value]="c.id">{{ getClientDisplayName(c) }}</option>
+          </select>
+        </div>
+
+        <!-- Coordinates auto-filled -->
+        <div class="form-row" *ngIf="newOrder.clientId">
+          <div class="form-group">
+            <label>Latitude</label>
+            <input type="number" step="any" [(ngModel)]="newOrder.latitudeLivraison" placeholder="Latitude">
+          </div>
+          <div class="form-group">
+            <label>Longitude</label>
+            <input type="number" step="any" [(ngModel)]="newOrder.longitudeLivraison" placeholder="Longitude">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Adresse de livraison</label>
+          <input type="text" [(ngModel)]="newOrder.adresseLivraison" placeholder="Adresse de livraison">
+        </div>
+
+        <!-- Products Section -->
+        <div class="section-header">
+          <span class="section-title">Produits</span>
+          <button *ngIf="!loadingProducts" class="btn-primary btn-sm" (click)="openProductPicker()">
+            <span class="material-icons">add</span> Ajouter
+          </button>
+        </div>
+
+        <div *ngIf="loadingProducts" class="loading-inline"><div class="spinner-sm"></div> Chargement des produits...</div>
+
+        <div *ngIf="!loadingProducts && selectedItems.length === 0" class="empty-inline">
+          <span class="material-icons">inventory_2</span> Aucun produit ajouté
+        </div>
+
+        <!-- Selected items list -->
+        <div *ngIf="selectedItems.length > 0" class="order-items">
+          <div class="order-item" *ngFor="let item of selectedItems; let i = index">
+            <div class="item-info">
+              <span class="item-name">{{ item.produitNom }}</span>
+              <span class="item-ref">{{ item.produitReference }} — Stock: {{ item.totalStock }}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button class="btn-icon" (click)="item.quantite = item.quantite > 1 ? item.quantite - 1 : 1"><span class="material-icons">remove</span></button>
+              <span style="font-weight:600;min-width:24px;text-align:center;">{{ item.quantite }}</span>
+              <button class="btn-icon" (click)="item.quantite = item.quantite + 1"><span class="material-icons">add</span></button>
+            </div>
+            <div class="item-price">{{ (item.prixHT * item.quantite).toFixed(3) }} TND</div>
+            <button class="btn-icon danger" (click)="removeProduct(i)"><span class="material-icons">close</span></button>
+          </div>
+          <div style="text-align:right;padding:12px 0;font-weight:700;font-size:16px;color:#1A237E;">
+            Total HT: {{ getOrderTotal().toFixed(3) }} TND
+          </div>
+        </div>
+
+        <!-- Collection Plan -->
+        <div *ngIf="selectedItems.length > 0" class="collection-section">
+          <div class="section-header">
+            <span class="section-title">Plan de collecte</span>
+            <div class="collection-toggle">
+              <button class="chip" [class.active]="collectionType === 'auto'" (click)="setCollectionAuto()">
+                <span class="material-icons" style="font-size:16px;">auto_fix_high</span> Auto
+              </button>
+              <button class="chip" [class.active]="collectionType === 'manual'" (click)="setCollectionManual()">
+                <span class="material-icons" style="font-size:16px;">tune</span> Manuel
+              </button>
+            </div>
+          </div>
+
+          <div *ngIf="collectionType === 'auto'" class="collection-info">
+            <span class="material-icons">info</span>
+            Le plan de collecte sera généré automatiquement après la création de la commande.
+          </div>
+
+          <!-- Manual depot assignment per product -->
+          <div *ngIf="collectionType === 'manual'" class="manual-assignments">
+            <div *ngFor="let item of selectedItems; let pi = index" class="assignment-card">
+              <div class="assignment-header">
+                <span class="material-icons">inventory_2</span>
+                <strong>{{ item.produitNom }}</strong>
+                <span class="item-ref">(Qté: {{ item.quantite }})</span>
+              </div>
+              <!-- Available depots for this product -->
+              <div class="depot-list">
+                <div *ngFor="let depot of item.depotStocks" class="depot-option">
+                  <div class="depot-info">
+                    <span class="material-icons" style="font-size:16px;color:#1A237E;">warehouse</span>
+                    <strong>{{ depot.depotNom || 'Dépôt #' + depot.depotId }}</strong>
+                    <span class="depot-stock">{{ depot.quantiteDisponible }} en stock</span>
+                  </div>
+                  <button class="btn-sm btn-success" (click)="addDepotAssignment(pi, depot)"
+                    *ngIf="!isDepotAssigned(pi, depot.depotId)">
+                    <span class="material-icons" style="font-size:16px;">add</span>
+                  </button>
+                  <span *ngIf="isDepotAssigned(pi, depot.depotId)"
+                    class="material-icons" style="color:#4CAF50;">check_circle</span>
+                </div>
+              </div>
+              <!-- Assigned depots -->
+              <div *ngIf="manualAssignments[pi] && manualAssignments[pi].length > 0" class="assigned-depots">
+                <div *ngFor="let assign of manualAssignments[pi]; let di = index" class="assigned-depot">
+                  <span>{{ assign.depotNom }}</span>
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    <label style="font-size:12px;">Qté:</label>
+                    <input type="number" min="1" [(ngModel)]="assign.quantite" style="width:60px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                    <button class="btn-icon danger" (click)="removeDepotAssignment(pi, di)"><span class="material-icons" style="font-size:16px;">close</span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea [(ngModel)]="newOrder.notes" rows="2" placeholder="Notes..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closeCreateForm()">Annuler</button>
+        <button class="btn-primary" (click)="createOrder()" [disabled]="!newOrder.clientId || selectedItems.length === 0">Créer la commande</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Picker Modal (like Flutter _showProductPicker) -->
+  <div class="modal-overlay" *ngIf="showProductPicker" (click)="closeProductPicker()">
+    <div class="modal" style="max-width:560px;" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Sélectionner un produit</h2>
+        <button class="btn-icon" (click)="closeProductPicker()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <input type="text" [(ngModel)]="productSearchTerm" placeholder="Rechercher un produit...">
+        </div>
+        <div class="product-picker-list">
+          <div *ngIf="filteredProductsStock.length === 0" class="empty-inline">
+            <span class="material-icons">search_off</span> Aucun produit trouvé
+          </div>
+          <div *ngFor="let p of filteredProductsStock" class="product-picker-item" [class.disabled]="isProductSelected(p.produitId)" (click)="selectProduct(p)">
+            <span class="material-icons" [style.color]="isProductSelected(p.produitId) ? '#4CAF50' : '#1A237E'">
+              {{ isProductSelected(p.produitId) ? 'check_circle' : 'inventory_2' }}
+            </span>
+            <div class="picker-info">
+              <span class="picker-name">{{ p.produitNom }}</span>
+              <span class="picker-detail">{{ p.prixHT.toFixed(3) }} TND | Stock: {{ p.totalStock }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closeProductPicker()">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>

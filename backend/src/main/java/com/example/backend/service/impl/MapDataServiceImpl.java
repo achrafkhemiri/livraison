@@ -122,7 +122,7 @@ public class MapDataServiceImpl implements MapDataService {
                     .filter(s -> s.getDepot() != null)
                     .map(s -> ProductStockInfoDTO.DepotStockDTO.builder()
                             .depotId(s.getDepot().getId())
-                            .depotNom(s.getDepot().getNom() != null ? s.getDepot().getNom() : s.getDepot().getLibelleDepot())
+                            .depotNom(s.getDepot().getLibelleDepot() != null && !s.getDepot().getLibelleDepot().isBlank() ? s.getDepot().getLibelleDepot() : s.getDepot().getNom())
                             .depotLatitude(s.getDepot().getLatitude())
                             .depotLongitude(s.getDepot().getLongitude())
                             .quantiteDisponible(s.getActualQuantity())

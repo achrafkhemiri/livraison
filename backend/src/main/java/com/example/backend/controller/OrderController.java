@@ -116,8 +116,11 @@ public class OrderController {
     
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('GERANT', 'LIVREUR')")
-    public ResponseEntity<OrderDTO> updateStatus(@PathVariable Long id, @RequestParam String status) {
-        return ResponseEntity.ok(orderService.updateStatus(id, status));
+    public ResponseEntity<OrderDTO> updateStatus(
+            @PathVariable Long id,
+            @RequestParam String status,
+            @RequestParam(required = false) java.math.BigDecimal distanceKm) {
+        return ResponseEntity.ok(orderService.updateStatus(id, status, distanceKm));
     }
     
     @PatchMapping("/{id}/assign/{livreurId}")

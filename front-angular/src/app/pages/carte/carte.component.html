@@ -1,0 +1,32 @@
+<div class="page map-page">
+  <div class="page-header">
+    <h1>Carte</h1>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span style="font-size:13px;color:#888;">{{ getMarkerCount() }} marqueur(s)</span>
+      <button class="btn-secondary" (click)="centerMap()"><span class="material-icons" style="font-size:18px;">my_location</span> Recentrer</button>
+      <button class="btn-secondary" (click)="loadAllData()"><span class="material-icons" style="font-size:18px;">refresh</span> Actualiser</button>
+    </div>
+  </div>
+
+  <!-- Layer toggles -->
+  <div class="filters-bar">
+    <button class="chip" [class.active]="showSocietes" (click)="toggleLayer('societes')">
+      <span class="legend-dot" style="background:#1A237E;"></span> Sociétés ({{ societes.length }})
+    </button>
+    <button class="chip" [class.active]="showMagasins" (click)="toggleLayer('magasins')">
+      <span class="legend-dot" style="background:#2E7D32;"></span> Magasins ({{ magasins.length }})
+    </button>
+    <button class="chip" [class.active]="showDepots" (click)="toggleLayer('depots')">
+      <span class="legend-dot" style="background:#E65100;"></span> Dépôts ({{ depots.length }})
+    </button>
+    <button class="chip" [class.active]="showLivreurs" (click)="toggleLayer('livreurs')">
+      <span class="legend-dot" style="background:#C62828;"></span> Livreurs ({{ livreurs.length }})
+    </button>
+  </div>
+
+  <!-- Map -->
+  <div class="map-container">
+    <div id="map"></div>
+    <div *ngIf="loading" class="map-loading"><div class="spinner"></div><p>Chargement de la carte...</p></div>
+  </div>
+</div>

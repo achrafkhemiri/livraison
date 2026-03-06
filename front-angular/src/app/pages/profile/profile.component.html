@@ -1,0 +1,45 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Mon Profil</h1>
+  </div>
+
+  <div class="profile-layout" *ngIf="!loading">
+    <!-- Profile Card -->
+    <div class="profile-card">
+      <div class="avatar-large">{{ getInitials() }}</div>
+      <h2>{{ user.prenom }} {{ user.nom }}</h2>
+      <p class="role-badge">{{ getRoleLabel() }}</p>
+
+      <div class="profile-info">
+        <div class="info-row"><span class="material-icons">email</span><span>{{ user.email }}</span></div>
+        <div class="info-row" *ngIf="user.telephone"><span class="material-icons">phone</span><span>{{ user.telephone }}</span></div>
+      </div>
+
+      <button class="btn-danger" (click)="logout()" style="margin-top:20px;width:100%;">
+        <span class="material-icons">logout</span> Se déconnecter
+      </button>
+    </div>
+
+    <!-- Société Card -->
+    <div class="societe-card" *ngIf="societe">
+      <div class="card-header">
+        <div class="card-icon blue"><span class="material-icons">business</span></div>
+        <div class="card-title">
+          <h3>Ma Société</h3>
+          <span class="card-subtitle">Informations de l'entreprise</span>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="info-row"><span class="material-icons">business</span><span>{{ societe.raisonSociale || societe.nom }}</span></div>
+        <div class="info-row" *ngIf="societe.siret"><span class="material-icons">badge</span><span>SIRET: {{ societe.siret }}</span></div>
+        <div class="info-row" *ngIf="societe.adresse"><span class="material-icons">location_on</span><span>{{ societe.adresse }}</span></div>
+        <div class="info-row" *ngIf="societe.telephone"><span class="material-icons">phone</span><span>{{ societe.telephone }}</span></div>
+        <div class="info-row" *ngIf="societe.email"><span class="material-icons">email</span><span>{{ societe.email }}</span></div>
+        <div class="info-row" *ngIf="societe.matriculeFiscale"><span class="material-icons">receipt_long</span><span>MF: {{ societe.matriculeFiscale }}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading-state"><div class="spinner"></div><p>Chargement...</p></div>
+</div>

@@ -1,0 +1,104 @@
+<div class="app-layout" (click)="closeDropdowns()">
+  <!-- Sidebar -->
+  <aside class="sidebar" [class.collapsed]="sidebarCollapsed">
+    <div class="sidebar-header">
+      <div class="logo" *ngIf="!sidebarCollapsed">
+        <span class="logo-icon material-icons">local_shipping</span>
+        <span class="logo-text">Smart Delivery</span>
+      </div>
+      <div class="logo" *ngIf="sidebarCollapsed">
+        <span class="logo-icon material-icons">local_shipping</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a *ngFor="let item of menuItems"
+         [routerLink]="item.route"
+         routerLinkActive="active"
+         [routerLinkActiveOptions]="{exact: item.route === '/dashboard'}"
+         class="nav-item"
+         [title]="item.label">
+        <span class="material-icons">{{ item.icon }}</span>
+        <span class="nav-label" *ngIf="!sidebarCollapsed">{{ item.label }}</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <a class="nav-item" (click)="logout()" title="Déconnexion">
+        <span class="material-icons">logout</span>
+        <span class="nav-label" *ngIf="!sidebarCollapsed">Déconnexion</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content" [class.expanded]="sidebarCollapsed">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <button class="toggle-btn" (click)="toggleSidebar(); $event.stopPropagation()">
+        <span class="material-icons">{{ sidebarCollapsed ? 'menu_open' : 'menu' }}</span>
+      </button>
+
+      <div class="topbar-right" (click)="$event.stopPropagation()">
+        <!-- Notifications -->
+        <div class="notification-wrapper">
+          <button class="icon-btn" (click)="toggleNotifications()">
+            <span class="material-icons">notifications</span>
+            <span class="badge" *ngIf="unreadCount > 0">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+          </button>
+
+          <div class="dropdown notification-dropdown" *ngIf="showNotifications">
+            <div class="dropdown-header">
+              <h3>Notifications</h3>
+              <button class="text-btn" (click)="markAllAsRead()" *ngIf="unreadCount > 0">
+                Tout marquer lu
+              </button>
+            </div>
+            <div class="dropdown-body">
+              <div *ngIf="notifications.length === 0" class="empty-state">
+                Aucune notification
+              </div>
+              <div *ngFor="let notif of notifications"
+                   class="notification-item"
+                   [class.unread]="!notif.isRead">
+                <span class="material-icons notif-icon">{{ getNotificationIcon(notif.type) }}</span>
+                <div class="notif-content">
+                  <p class="notif-message">{{ notif.message }}</p>
+                  <span class="notif-time">{{ notif.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profile -->
+        <div class="profile-wrapper">
+          <button class="profile-btn" (click)="toggleProfileMenu()">
+            <div class="avatar">{{ getUserInitials() }}</div>
+            <div class="profile-info" *ngIf="!sidebarCollapsed">
+              <span class="profile-name">{{ userName }}</span>
+              <span class="profile-role">{{ societeName || userRole }}</span>
+            </div>
+          </button>
+
+          <div class="dropdown profile-dropdown" *ngIf="showProfileMenu">
+            <a class="dropdown-item" routerLink="/profile">
+              <span class="material-icons">person</span>
+              Profil
+            </a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" (click)="logout()">
+              <span class="material-icons">logout</span>
+              Déconnexion
+            </a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Content -->
+    <main class="page-content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+</div>

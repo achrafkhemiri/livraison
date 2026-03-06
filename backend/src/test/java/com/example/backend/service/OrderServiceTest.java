@@ -221,7 +221,7 @@ class OrderServiceTest {
                 OrderDTO.builder().id(1L).status("delivered").build());
 
         // When
-        OrderDTO result = orderService.updateStatus(1L, "delivered");
+        OrderDTO result = orderService.updateStatus(1L, "delivered", null);
 
         // Then
         assertThat(result.getStatus()).isEqualTo("delivered");
@@ -238,7 +238,7 @@ class OrderServiceTest {
                 OrderDTO.builder().id(1L).status("processing").build());
 
         // When
-        orderService.updateStatus(1L, "processing");
+        orderService.updateStatus(1L, "processing", null);
 
         // Then
         verify(orderRepository).save(argThat(o -> 

@@ -2524,7 +2524,21 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     final routeProvider = context.read<DeliveryRouteProvider>();
     final orderProvider = context.read<OrderProvider>();
     
-    final success = await orderProvider.markAsDelivered(stop.order.id!);
+    // Get the OSRM-calculated distance for this stop (in km)
+    double? distanceKm;
+    if (routeProvider.startPosition != null) {
+      final result = await OsrmService.getDistance(
+        routeProvider.startPosition!.latitude,
+        routeProvider.startPosition!.longitude,
+        stop.position.latitude,
+        stop.position.longitude,
+      );
+      if (result != null) {
+        distanceKm = result['distance'];
+      }
+    }
+    
+    final success = await orderProvider.markAsDelivered(stop.order.id!, distanceKm: distanceKm);
     
     if (success) {
       routeProvider.markStopAsDelivered(stop.id);

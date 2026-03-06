@@ -314,6 +314,7 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
               }
 
               final provider = context.read<LivreurProvider>();
+              final authProvider = context.read<AuthProvider>();
               final newLivreur = User(
                 id: livreur?.id ?? 0,
                 nom: nomController.text,
@@ -321,13 +322,18 @@ class _LivreurListScreenState extends State<LivreurListScreen> {
                 email: emailController.text,
                 telephone: telephoneController.text.isEmpty ? null : telephoneController.text,
                 role: 'LIVREUR',
+                societeId: authProvider.user?.societeId,
               );
 
               bool success;
               if (isEdit) {
                 success = await provider.updateLivreur(livreur!.id!, newLivreur);
               } else {
-                success = await provider.createLivreur(newLivreur);
+                success = await provider.createLivreur(
+                  newLivreur,
+                  password: passwordController.text,
+                  societeId: authProvider.user?.societeId,
+                );
               }
 
               if (context.mounted) {

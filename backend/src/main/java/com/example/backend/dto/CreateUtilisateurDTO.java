@@ -31,4 +31,6 @@ public class CreateUtilisateurDTO {
     
     @NotNull(message = "Le rôle est obligatoire")
     private Role role;
+
+    private Long societeId;
 }

@@ -21,7 +21,7 @@ public interface OrderService {
     List<OrderDTO> findPendingOrdersForLivreur(Long livreurId);
     OrderDTO create(OrderDTO orderDTO);
     OrderDTO update(Long id, OrderDTO orderDTO);
-    OrderDTO updateStatus(Long id, String status);
+    OrderDTO updateStatus(Long id, String status, java.math.BigDecimal distanceKm);
     OrderDTO assignLivreur(Long orderId, Long livreurId);
     OrderDTO acceptAssignment(Long orderId, Long livreurId);
     OrderDTO rejectAssignment(Long orderId, Long livreurId);

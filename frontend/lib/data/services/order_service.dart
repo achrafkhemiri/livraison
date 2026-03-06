@@ -51,8 +51,12 @@ class OrderService {
     return Order.fromJson(response);
   }
 
-  Future<Order> updateStatus(int id, String status) async {
-    final response = await _api.patch('${ApiConstants.orders}/$id/status?status=$status');
+  Future<Order> updateStatus(int id, String status, {double? distanceKm}) async {
+    String url = '${ApiConstants.orders}/$id/status?status=$status';
+    if (distanceKm != null) {
+      url += '&distanceKm=$distanceKm';
+    }
+    final response = await _api.patch(url);
     return Order.fromJson(response);
   }
 

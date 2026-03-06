@@ -37,6 +37,9 @@ class FcmNotificationService {
   /// Callback when user taps on a notification
   Function(String? orderId)? onNotificationTap;
 
+  /// Callback when a foreground message arrives (to refresh data)
+  Function(Map<String, dynamic> data)? onForegroundMessage;
+
   /// Initialize Firebase Messaging and local notifications
   Future<void> initialize() async {
     // Request permission (iOS & Android 13+)
@@ -138,6 +141,9 @@ class FcmNotificationService {
   /// Handle foreground message — show as local notification
   void _handleForegroundMessage(RemoteMessage message) {
     debugPrint('FCM foreground message: ${message.messageId}');
+
+    // Notify listeners to refresh data
+    onForegroundMessage?.call(message.data);
 
     RemoteNotification? notification = message.notification;
     if (notification != null) {

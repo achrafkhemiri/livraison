@@ -112,7 +112,7 @@ class MockOrderProvider extends ChangeNotifier implements OrderProvider {
   }
 
   @override
-  Future<bool> updateOrderStatus(int id, String status) async => true;
+  Future<bool> updateOrderStatus(int id, String status, {double? distanceKm}) async => true;
 
   @override
   Future<bool> assignOrderToLivreur(int orderId, int livreurId) async => true;

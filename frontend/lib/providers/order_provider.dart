@@ -267,13 +267,13 @@ class OrderProvider extends ChangeNotifier {
   }
   
   // Update order status
-  Future<bool> updateOrderStatus(int id, String status) async {
+  Future<bool> updateOrderStatus(int id, String status, {double? distanceKm}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     
     try {
-      final updated = await _service.updateStatus(id, status);
+      final updated = await _service.updateStatus(id, status, distanceKm: distanceKm);
       if (updated != null) {
         _updateOrderInLists(id, updated);
         notifyListeners();
@@ -386,8 +386,8 @@ class OrderProvider extends ChangeNotifier {
   }
   
   // Mark order as delivered
-  Future<bool> markAsDelivered(int orderId) async {
-    return await updateOrderStatus(orderId, 'delivered');
+  Future<bool> markAsDelivered(int orderId, {double? distanceKm}) async {
+    return await updateOrderStatus(orderId, 'delivered', distanceKm: distanceKm);
   }
   
   // Mark order as shipped (in transit)

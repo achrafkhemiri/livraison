@@ -30,6 +30,8 @@ public class NotificationServiceImpl implements NotificationService {
             case "ORDER_ACCEPTED" -> "Commande acceptée";
             case "ORDER_REJECTED" -> "Commande refusée";
             case "ORDER_ASSIGNED" -> "Commande assignée";
+            case "ORDER_COLLECTED" -> "Commande collectée";
+            case "ORDER_DELIVERED" -> "Commande livrée";
             case "ORDER_STATUS" -> "Statut commande";
             default -> "Notification";
         };

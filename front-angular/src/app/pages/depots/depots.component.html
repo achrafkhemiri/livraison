@@ -1,0 +1,109 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Dépôts</h1>
+    <button class="btn-primary" (click)="openCreate()">
+      <span class="material-icons">add</span> Nouveau Dépôt
+    </button>
+  </div>
+
+  <div class="card-grid" *ngIf="!loading">
+    <div class="entity-card" *ngFor="let d of depots">
+      <div class="card-header">
+        <div class="card-icon orange">
+          <span class="material-icons">warehouse</span>
+        </div>
+        <div class="card-title">
+          <h3>{{ d.libelleDepot }}</h3>
+          <span class="card-subtitle">{{ d.magasinNom || 'Sans magasin' }}</span>
+        </div>
+        <span class="status-dot" [class.active]="d.actif" [class.inactive]="!d.actif"></span>
+      </div>
+      <div class="card-body">
+        <div class="info-row" *ngIf="d.code"><span class="material-icons">tag</span><span>Code: {{ d.code }}</span></div>
+        <div class="info-row" *ngIf="d.adresse"><span class="material-icons">location_on</span><span>{{ d.adresse }}<span *ngIf="d.ville">, {{ d.ville }}</span></span></div>
+        <div class="info-row" *ngIf="d.telephone"><span class="material-icons">phone</span><span>{{ d.telephone }}</span></div>
+        <div class="info-row" *ngIf="d.latitude && d.longitude"><span class="material-icons">gps_fixed</span><span>{{ d.latitude.toFixed(4) }}, {{ d.longitude.toFixed(4) }}</span></div>
+        <div class="info-row" *ngIf="d.capaciteStockage"><span class="material-icons">inventory_2</span><span>Capacité: {{ d.capaciteStockage }}</span></div>
+
+        <!-- Stocks preview -->
+        <div *ngIf="d.stocks && d.stocks.length > 0" class="stocks-preview">
+          <div class="stock-item" *ngFor="let s of d.stocks.slice(0, 3)">
+            <span class="stock-name">{{ s.produitDesignation || s.produitCode }}</span>
+            <span class="stock-qty" [ngClass]="getStockClass(s)">{{ s.quantiteDisponible }}</span>
+          </div>
+          <button *ngIf="d.stocks.length > 3" class="text-link" (click)="openStockModal(d)">
+            Voir tout ({{ d.stocks.length }})
+          </button>
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="btn-icon" title="Modifier" (click)="openEdit(d)"><span class="material-icons">edit</span></button>
+        <button class="btn-icon danger" title="Supprimer" (click)="delete(d)"><span class="material-icons">delete</span></button>
+        <button *ngIf="d.stocks && d.stocks.length > 0" class="btn-icon" title="Voir stocks" (click)="openStockModal(d)"><span class="material-icons">inventory</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && depots.length === 0" class="empty-state">
+    <span class="material-icons">warehouse</span><p>Aucun dépôt trouvé</p>
+  </div>
+  <div *ngIf="loading" class="loading-state"><div class="spinner"></div><p>Chargement...</p></div>
+
+  <!-- Create/Edit Modal -->
+  <div class="modal-overlay" *ngIf="showForm" (click)="closeForm()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ editingDepot ? 'Modifier' : 'Nouveau' }} Dépôt</h2>
+        <button class="btn-icon" (click)="closeForm()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Magasin</label>
+          <select [(ngModel)]="formData.magasinId">
+            <option [ngValue]="undefined">-- Sélectionner --</option>
+            <option *ngFor="let m of magasins" [ngValue]="m.id">{{ m.nom }}</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Libellé *</label><input type="text" [(ngModel)]="formData.libelleDepot" placeholder="Libellé du dépôt"></div>
+          <div class="form-group"><label>Code</label><input type="text" [(ngModel)]="formData.code" placeholder="Code"></div>
+        </div>
+        <div class="form-group"><label>Adresse</label><input type="text" [(ngModel)]="formData.adresse" placeholder="Adresse"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Ville</label><input type="text" [(ngModel)]="formData.ville" placeholder="Ville"></div>
+          <div class="form-group"><label>Code Postal</label><input type="text" [(ngModel)]="formData.codePostal" placeholder="Code postal"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Téléphone</label><input type="text" [(ngModel)]="formData.telephone" placeholder="Téléphone"></div>
+          <div class="form-group"><label>Capacité</label><input type="number" [(ngModel)]="formData.capaciteStockage" placeholder="Capacité"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Latitude</label><input type="number" [(ngModel)]="formData.latitude" step="0.0001"></div>
+          <div class="form-group"><label>Longitude</label><input type="number" [(ngModel)]="formData.longitude" step="0.0001"></div>
+        </div>
+        <div class="form-group"><label class="checkbox-label"><input type="checkbox" [(ngModel)]="formData.actif"> Actif</label></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closeForm()">Annuler</button>
+        <button class="btn-primary" (click)="save()">{{ editingDepot ? 'Modifier' : 'Créer' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stock Modal -->
+  <div class="modal-overlay" *ngIf="showStockModal" (click)="closeStockModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Stocks - {{ selectedDepot?.libelleDepot }}</h2>
+        <button class="btn-icon" (click)="closeStockModal()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="modal-body">
+        <div *ngIf="selectedDepot?.stocks?.length === 0" class="empty-state"><p>Aucun stock</p></div>
+        <div class="stock-item" *ngFor="let s of selectedDepot?.stocks">
+          <span class="stock-name">{{ s.produitDesignation || s.produitCode || 'Produit #' + s.produitId }}</span>
+          <span class="stock-qty" [ngClass]="getStockClass(s)">{{ s.quantiteDisponible }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 class ApiConstants {
   // IP locale de votre ordinateur (mettez à jour si votre IP change)
   // Actuellement la machine a l'IP 192.168.100.53 — remplacez si nécessaire 192.168.1.16.
-  static const String _localIp = '192.168.1.23';
+  static const String _localIp = '192.168.100.53';
 
   static String get _host {
     if (kIsWeb) return 'localhost';
@@ -21,6 +21,7 @@ class ApiConstants {
   // Auth endpoints
   static const String login = '/auth/login';
   static const String register = '/auth/register';
+  static const String me = '/auth/me';
   
   // Societe endpoints
   static const String societes = '/societes';
