@@ -6,6 +6,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
 import '../../../core/constants/responsive.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../data/services/auth_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -191,6 +192,20 @@ class ProfileScreen extends StatelessWidget {
                     title: 'Détails du compte',
                     children: [
                       _buildInfoTile(r, Icons.tag, 'Identifiant', '#${user.id}'),
+                      SizedBox(height: r.space(8)),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: r.space(16), vertical: r.space(8)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () => _showChangePasswordDialog(context),
+                                child: const Text('Changer le mot de passe'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: r.space(32)),
@@ -298,6 +313,96 @@ class ProfileScreen extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: r.space(16)),
       child: const Divider(height: 1, color: AppColors.divider),
+    );
+  }
+
+  void _showChangePasswordDialog(BuildContext context) {
+    final oldController = TextEditingController();
+    final newController = TextEditingController();
+    final confirmController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final authService = AuthService();
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool showOld = false;
+        bool showNew = false;
+        bool showConfirm = false;
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Changer le mot de passe'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: oldController,
+                    decoration: InputDecoration(
+                      labelText: 'Ancien mot de passe',
+                      suffixIcon: IconButton(
+                        icon: Icon(showOld ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => showOld = !showOld),
+                      ),
+                    ),
+                    obscureText: !showOld,
+                    validator: (v) => v == null || v.isEmpty ? 'Obligatoire' : null,
+                  ),
+                  TextFormField(
+                    controller: newController,
+                    decoration: InputDecoration(
+                      labelText: 'Nouveau mot de passe',
+                      suffixIcon: IconButton(
+                        icon: Icon(showNew ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => showNew = !showNew),
+                      ),
+                    ),
+                    obscureText: !showNew,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Obligatoire';
+                      if (v.length < 6) return 'Au moins 6 caractères';
+                      return null;
+                    },
+                  ),
+                  TextFormField(
+                    controller: confirmController,
+                    decoration: InputDecoration(
+                      labelText: 'Confirmer le nouveau mot de passe',
+                      suffixIcon: IconButton(
+                        icon: Icon(showConfirm ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => showConfirm = !showConfirm),
+                      ),
+                    ),
+                    obscureText: !showConfirm,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Obligatoire';
+                      if (v != newController.text) return 'Les mots de passe ne correspondent pas';
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Annuler')),
+              ElevatedButton(
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  try {
+                    await authService.changePassword(oldController.text, newController.text);
+                    Navigator.of(ctx).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mot de passe mis à jour')));
+                  } catch (e) {
+                    Navigator.of(ctx).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+                  }
+                },
+                child: const Text('Valider'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

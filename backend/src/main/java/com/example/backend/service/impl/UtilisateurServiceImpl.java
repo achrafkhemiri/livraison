@@ -135,6 +135,19 @@ public class UtilisateurServiceImpl implements UtilisateurService {
         utilisateur.setPassword(passwordEncoder.encode(newPassword));
         utilisateurRepository.save(utilisateur);
     }
+
+    @Override
+    public void changePasswordSelf(String email, String oldPassword, String newPassword) {
+        Utilisateur utilisateur = utilisateurRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", "email", email));
+
+        if (!passwordEncoder.matches(oldPassword, utilisateur.getPassword())) {
+            throw new com.example.backend.exception.BadRequestException("Ancien mot de passe incorrect");
+        }
+
+        utilisateur.setPassword(passwordEncoder.encode(newPassword));
+        utilisateurRepository.save(utilisateur);
+    }
     
     @Override
     public UtilisateurDTO updatePosition(Long id, Double latitude, Double longitude) {

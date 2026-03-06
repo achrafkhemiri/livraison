@@ -65,4 +65,11 @@ class AuthService {
     final response = await _api.get(ApiConstants.me);
     return User.fromJson(response);
   }
+
+  Future<void> changePassword(String oldPassword, String newPassword) async {
+    await _api.patch(ApiConstants.changePassword, data: {
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
+    });
+  }
 }

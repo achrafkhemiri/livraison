@@ -17,6 +17,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -74,5 +76,14 @@ public class AuthController {
     public ResponseEntity<UtilisateurDTO> getCurrentUser(Authentication authentication) {
         String email = authentication.getName();
         return ResponseEntity.ok(utilisateurService.findByEmail(email));
+    }
+
+    @PatchMapping("/password")
+    public ResponseEntity<Void> changePassword(@RequestBody Map<String, String> request, Authentication authentication) {
+        String email = authentication.getName();
+        String oldPassword = request.get("oldPassword");
+        String newPassword = request.get("newPassword");
+        utilisateurService.changePasswordSelf(email, oldPassword, newPassword);
+        return ResponseEntity.ok().build();
     }
 }

@@ -18,5 +18,6 @@ public interface UtilisateurService {
     UtilisateurDTO update(Long id, UtilisateurDTO utilisateurDTO);
     UtilisateurDTO updatePosition(Long id, Double latitude, Double longitude);
     void updatePassword(Long id, String newPassword);
+    void changePasswordSelf(String email, String oldPassword, String newPassword);
     void delete(Long id);
 }
