@@ -1,9 +1,6 @@
 <div class="page">
   <div class="page-header">
     <h1>Commissions & Paiements</h1>
-    <div class="auto-badge">
-      <span class="material-icons">bolt</span> Commission automatique à la livraison
-    </div>
   </div>
 
   <!-- Tabs -->
@@ -117,12 +114,7 @@
 
   <!-- ═══ TAB: Paiements ═══ -->
   <div class="table-container" *ngIf="!loading && activeTab === 'paiements'">
-    <div style="display:flex;justify-content:flex-end;padding:12px 16px">
-      <button class="btn-primary" (click)="recalculateDistances()" [disabled]="recalculating">
-        <span class="material-icons">refresh</span>
-        {{ recalculating ? 'Recalcul en cours...' : 'Recalculer les distances' }}
-      </button>
-    </div>
+    <!-- Bouton 'Recalculer les distances' supprimé conformément à la demande -->
     <table *ngIf="paiements.length > 0">
         <thead>
           <tr>
