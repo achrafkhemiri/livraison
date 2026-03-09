@@ -66,6 +66,19 @@ class ApiService {
     }
   }
 
+  Future<dynamic> postList(String endpoint, List<dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}$endpoint'),
+        headers: await _getAuthHeaders(),
+        body: jsonEncode(data),
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      throw ApiException('Erreur de connexion: $e');
+    }
+  }
+
   Future<dynamic> put(String endpoint, Map<String, dynamic> data) async {
     try {
       final response = await http.put(

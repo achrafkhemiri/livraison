@@ -2,6 +2,7 @@ package com.example.backend.service.impl;
 
 import com.example.backend.dto.OrderDTO;
 import com.example.backend.dto.OrderItemDTO;
+import com.example.backend.dto.CollectedItemDTO;
 import com.example.backend.dto.PageResponse;
 import com.example.backend.exception.BadRequestException;
 import com.example.backend.exception.ResourceNotFoundException;
@@ -520,6 +521,64 @@ public class OrderServiceImpl implements OrderService {
                     );
                 }
             }
+        }
+        
+        return orderMapper.toDTO(order);
+    }
+    
+    @Override
+    public OrderDTO markItemsCollected(Long orderId, List<CollectedItemDTO> items) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Commande", "id", orderId));
+        
+        for (CollectedItemDTO collectedItem : items) {
+            List<OrderItem> orderItems = orderItemRepository.findByOrderIdAndProduitId(orderId, collectedItem.getProduitId());
+            for (OrderItem oi : orderItems) {
+                int currentCollected = oi.getCollectedQuantity() != null ? oi.getCollectedQuantity() : 0;
+                oi.setCollectedQuantity(currentCollected + collectedItem.getQuantity());
+                orderItemRepository.save(oi);
+            }
+        }
+        
+        // Re-fetch order to get updated collectedQuantity values
+        order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Commande", "id", orderId));
+        
+        // Check if all items are fully collected
+        boolean allCollected = order.getItems().stream().allMatch(oi -> {
+            int needed = oi.getActualQuantity();
+            int collected = oi.getCollectedQuantity() != null ? oi.getCollectedQuantity() : 0;
+            return collected >= needed;
+        });
+        
+        if (allCollected) {
+            order.setCollected(true);
+            order.setDateCollection(LocalDateTime.now());
+            order = orderRepository.save(order);
+            
+            // Notify gérants
+            if (order.getSocieteId() != null) {
+                String livreurName = "";
+                Long livreurId = null;
+                if (order.getLivreur() != null) {
+                    livreurName = (order.getLivreur().getNom() + " " + order.getLivreur().getPrenom()).trim();
+                    livreurId = order.getLivreur().getId();
+                }
+                List<Utilisateur> gerants = utilisateurRepository.findByRoleAndActifTrue(Role.GERANT);
+                for (Utilisateur gerant : gerants) {
+                    if (gerant.getSociete() != null && gerant.getSociete().getId().equals(order.getSocieteId())) {
+                        notificationService.create(
+                                gerant.getId(),
+                                "ORDER_COLLECTED",
+                                "La commande #" + order.getId() + " a été entièrement collectée" + (livreurName.isEmpty() ? "." : " par " + livreurName + "."),
+                                orderId,
+                                livreurId
+                        );
+                    }
+                }
+            }
+        } else {
+            order = orderRepository.save(order);
         }
         
         return orderMapper.toDTO(order);

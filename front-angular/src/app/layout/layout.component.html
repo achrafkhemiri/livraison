@@ -60,7 +60,8 @@
               </div>
               <div *ngFor="let notif of notifications"
                    class="notification-item"
-                   [class.unread]="!notif.isRead">
+                   [class.unread]="!notif.isRead"
+                   (click)="markAsRead(notif)">
                 <span class="material-icons notif-icon">{{ getNotificationIcon(notif.type) }}</span>
                 <div class="notif-content">
                   <p class="notif-message">{{ notif.message }}</p>

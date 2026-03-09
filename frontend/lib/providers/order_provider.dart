@@ -530,4 +530,18 @@ class OrderProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  // Mark specific items as collected for an order
+  Future<bool> markItemsCollected(int orderId, List<Map<String, dynamic>> items) async {
+    try {
+      final updated = await _service.markItemsCollected(orderId, items);
+      _updateOrderInLists(orderId, updated);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
 }

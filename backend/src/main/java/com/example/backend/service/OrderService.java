@@ -27,5 +27,6 @@ public interface OrderService {
     OrderDTO rejectAssignment(Long orderId, Long livreurId);
     List<OrderDTO> findProposedOrdersForLivreur(Long livreurId);
     OrderDTO markAsCollected(Long orderId);
+    OrderDTO markItemsCollected(Long orderId, java.util.List<com.example.backend.dto.CollectedItemDTO> items);
     void delete(Long id);
 }

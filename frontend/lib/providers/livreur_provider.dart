@@ -13,14 +13,17 @@ class LivreurProvider extends ChangeNotifier {
   LatLng? _currentPosition;
   bool _isLoading = false;
   bool _isTrackingPosition = false;
+  bool _isLocationEnabled = false;
   String? _errorMessage;
   StreamSubscription<Position>? _positionSubscription;
+  StreamSubscription<ServiceStatus>? _serviceStatusSubscription;
   
   List<User> get livreurs => _livreurs;
   User? get currentLivreur => _currentLivreur;
   LatLng? get currentPosition => _currentPosition;
   bool get isLoading => _isLoading;
   bool get isTrackingPosition => _isTrackingPosition;
+  bool get isLocationEnabled => _isLocationEnabled;
   String? get errorMessage => _errorMessage;
   
   // Load all livreurs (for Gérant)
@@ -159,8 +162,26 @@ class LivreurProvider extends ChangeNotifier {
   // Start position tracking
   Future<bool> startPositionTracking() async {
     try {
+      // Start listening for GPS on/off changes
+      _serviceStatusSubscription ??= Geolocator.getServiceStatusStream().listen((status) {
+        if (status == ServiceStatus.disabled) {
+          _isLocationEnabled = false;
+          _currentPosition = null;
+          _isTrackingPosition = false;
+          _positionSubscription?.cancel();
+          _positionSubscription = null;
+          notifyListeners();
+        } else if (status == ServiceStatus.enabled) {
+          _isLocationEnabled = true;
+          notifyListeners();
+          // Re-start tracking automatically
+          startPositionTracking();
+        }
+      });
+
       // Check permissions
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      _isLocationEnabled = serviceEnabled;
       if (!serviceEnabled) {
         _errorMessage = 'Les services de localisation sont désactivés.';
         notifyListeners();
@@ -224,6 +245,17 @@ class LivreurProvider extends ChangeNotifier {
     _isTrackingPosition = false;
     notifyListeners();
   }
+
+  /// Check if location service is currently enabled (async, fresh check).
+  Future<bool> checkLocationService() async {
+    _isLocationEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!_isLocationEnabled) {
+      _currentPosition = null;
+      _isTrackingPosition = false;
+    }
+    notifyListeners();
+    return _isLocationEnabled;
+  }
   
   // Get current position once
   Future<LatLng?> getCurrentPosition() async {
@@ -266,6 +298,7 @@ class LivreurProvider extends ChangeNotifier {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _serviceStatusSubscription?.cancel();
     super.dispose();
   }
 }

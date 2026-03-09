@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -30,8 +31,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   bool _isSheetExpanded = true; // Contrôle l'état du bottom sheet
   bool _isTogglingSheet = false; // Guard pour ignorer les notifications pendant le toggle
   
-  // Default center: Sfax, Tunisia
-  static const LatLng _defaultCenter = LatLng(34.74, 10.76);
+
   
   // Live tracking listener
   VoidCallback? _livreurPositionListener;
@@ -105,7 +105,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     ]);
     if (!mounted) return;
     
-    // Get current position
+    // Get current position — require location to be enabled
     final position = livreurProvider.currentPosition ?? await livreurProvider.getCurrentPosition();
     if (!mounted) return;
     
@@ -113,8 +113,8 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
       routeProvider.setStartPosition(position);
       _mapController.move(position, 13);
     } else {
-      routeProvider.setStartPosition(_defaultCenter);
-      _mapController.move(_defaultCenter, 12);
+      // Location not available — show activation dialog
+      _showLocationRequiredDialog();
     }
     
     // Get orders from arguments or use active orders
@@ -452,7 +452,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 SizedBox(width: r.space(6)),
                 Consumer<DeliveryRouteProvider>(
                   builder: (context, p, _) => Text(
-                    'Livrer (${p.stops.where((s) => !s.isDelivered).length})',
+                    'Livrer (${p.stops.length})',
                   ),
                 ),
               ],
@@ -486,10 +486,11 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     final stops = routeProvider.collectionStops.where((s) => !s.isCollected).toList();
     
     // All available order IDs (from initial load, not just current plan)
+    // Exclude orders already fully collected from the selectable list
     final allAvailableOrderIds = routeProvider.allAvailableOrders
-        .where((o) => o.id != null)
-        .map((o) => o.id!)
-        .toSet();
+      .where((o) => o.id != null && o.collected != true)
+      .map((o) => o.id!)
+      .toSet();
     final selectedCount = routeProvider.selectedCollectionIds.length;
     final needsRecompute = routeProvider.needsRecomputation;
     
@@ -633,6 +634,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   }
 
   Future<void> _recomputePlan(DeliveryRouteProvider routeProvider) async {
+    if (!await _checkLocationOrWarn()) return;
     final livreurProvider = context.read<LivreurProvider>();
     final pos = livreurProvider.currentPosition;
     await routeProvider.recomputeCollectionPlan(
@@ -729,12 +731,25 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                       ),
                       ...stop.items.map((item) => Padding(
                         padding: EdgeInsets.only(top: r.space(2)),
-                        child: Text(
-                          '${item.name} x${item.quantity} (CMD #${item.orderId})',
-                          style: GoogleFonts.poppins(
-                            fontSize: r.fontSize(10),
-                            color: Colors.grey.shade600,
-                          ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              item.isCollected ? Icons.check_circle : Icons.circle_outlined,
+                              size: r.iconSize(14),
+                              color: item.isCollected ? const Color(0xFF00c853) : Colors.grey.shade400,
+                            ),
+                            SizedBox(width: r.space(4)),
+                            Expanded(
+                              child: Text(
+                                '${item.name} x${item.quantity} (CMD #${item.orderId})',
+                                style: GoogleFonts.poppins(
+                                  fontSize: r.fontSize(10),
+                                  color: item.isCollected ? Colors.green.shade700 : Colors.grey.shade600,
+                                  decoration: item.isCollected ? TextDecoration.lineThrough : null,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       )),
                     ],
@@ -751,11 +766,13 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   }
 
   Widget _collectButton(CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider, Responsive r) {
+    final uncollectedCount = stop.items.where((i) => !i.isCollected).length;
+    final allDone = uncollectedCount == 0;
     return ElevatedButton.icon(
-      onPressed: () => _markCollected(stop, routeProvider, orderProvider),
-      icon: Icon(Icons.check, size: r.iconSize(16)),
+      onPressed: allDone ? null : () => _markCollected(stop, routeProvider, orderProvider),
+      icon: Icon(allDone ? Icons.done_all : Icons.check, size: r.iconSize(16)),
       label: Text(
-        'Collecté',
+        allDone ? 'Terminé' : 'Collecter ($uncollectedCount)',
         style: GoogleFonts.poppins(
           fontSize: r.fontSize(12),
           fontWeight: FontWeight.w600,
@@ -1027,7 +1044,6 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   }
 
   Widget _buildStopItem(int index, DeliveryStop stop, DeliveryRouteProvider provider, Responsive r) {
-    final isDelivered = stop.isDelivered;
     final isSelected = provider.isStopSelected(stop.id);
     
     return Container(
@@ -1036,21 +1052,17 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         color: Colors.white,
         borderRadius: BorderRadius.circular(r.radius(14)),
         border: Border.all(
-          color: isDelivered
-              ? const Color(0xFF00c853)
-              : isSelected
-                  ? const Color(0xFF1a237e)
-                  : Colors.grey.shade200,
-          width: isSelected || isDelivered ? 2 : 1,
+          color: isSelected
+              ? const Color(0xFF1a237e)
+              : Colors.grey.shade200,
+          width: isSelected ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: isDelivered
-                ? const Color(0xFF00c853).withOpacity(0.2)
-                : isSelected
-                    ? const Color(0xFF1a237e).withOpacity(0.15)
-                    : Colors.grey.withOpacity(0.08),
-            blurRadius: isSelected || isDelivered ? 8 : 4,
+            color: isSelected
+                ? const Color(0xFF1a237e).withOpacity(0.15)
+                : Colors.grey.withOpacity(0.08),
+            blurRadius: isSelected ? 8 : 4,
             offset: const Offset(0, 2),
           ),
         ],
@@ -1085,24 +1097,17 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                   width: r.scale(40),
                   height: r.scale(40),
                   decoration: BoxDecoration(
-                    gradient: isDelivered
+                    gradient: isSelected
                         ? const LinearGradient(
-                            colors: [Color(0xFF00c853), Color(0xFF00e676)],
+                            colors: [Color(0xFF1a237e), Color(0xFF3949AB)],
                           )
-                        : isSelected
-                            ? const LinearGradient(
-                                colors: [Color(0xFF1a237e), Color(0xFF3949AB)],
-                              )
-                            : null,
-                    color: !isDelivered && !isSelected ? Colors.grey.shade300 : null,
+                        : null,
+                    color: !isSelected ? Colors.grey.shade300 : null,
                     shape: BoxShape.circle,
-                    boxShadow: isDelivered || isSelected
+                    boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: (isDelivered
-                                      ? const Color(0xFF00c853)
-                                      : const Color(0xFF1a237e))
-                                  .withOpacity(0.3),
+                              color: const Color(0xFF1a237e).withOpacity(0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -1110,16 +1115,14 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                         : null,
                   ),
                   child: Center(
-                    child: isDelivered
-                        ? Icon(Icons.check, color: Colors.white, size: r.iconSize(20))
-                        : Text(
-                            '${index + 1}',
-                            style: GoogleFonts.poppins(
-                              color: isSelected ? Colors.white : Colors.grey.shade700,
-                              fontWeight: FontWeight.bold,
-                              fontSize: r.fontSize(16),
-                            ),
-                          ),
+                    child: Text(
+                      '${index + 1}',
+                      style: GoogleFonts.poppins(
+                        color: isSelected ? Colors.white : Colors.grey.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: r.fontSize(16),
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(width: r.space(14)),
@@ -1137,7 +1140,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: r.space(4)),
+                      SizedBox(height: r.space(2)),
                       Text(
                         'CMD #${stop.order.id}',
                         style: GoogleFonts.poppins(
@@ -1146,20 +1149,33 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                           fontWeight: FontWeight.w500,
                         ),
                       ),
+                      if (stop.order.montantTTC != null)
+                        Text(
+                          '${stop.order.montantTTC!.toStringAsFixed(2)} TND',
+                          style: GoogleFonts.poppins(
+                            fontSize: r.fontSize(11),
+                            color: Colors.orange.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                if (isSelected && !isDelivered)
-                  IconButton(
-                    icon: Icon(
-                      Icons.check_circle,
-                      color: const Color(0xFF00c853),
-                      size: r.iconSize(28),
+                if (isSelected)
+                  SizedBox(
+                    height: r.scale(34),
+                    child: ElevatedButton.icon(
+                      onPressed: () => _markDelivered(stop),
+                      icon: Icon(Icons.local_shipping, size: r.iconSize(16)),
+                      label: Text('Livré', style: GoogleFonts.poppins(fontSize: r.fontSize(12), fontWeight: FontWeight.w600)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00c853),
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: r.space(12)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
+                        elevation: 0,
+                      ),
                     ),
-                    onPressed: () => _markDelivered(stop),
-                    tooltip: 'Marquer livré',
-                    padding: EdgeInsets.zero,
-                    constraints: BoxConstraints(minWidth: r.scale(40), minHeight: r.scale(40)),
                   ),
               ],
             ),
@@ -1246,10 +1262,10 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           SizedBox(height: r.space(16)),
           _buildResultRow('Distance', provider.formattedDistance, r),
           _buildResultRow('Temps estimé', provider.formattedDuration, r),
-          _buildResultRow('Arrêts', '${provider.stops.length}', r),
+          _buildResultRow('Arrêts', '${provider.selectedStops.length}', r),
           _buildResultRow(
             'Livrées',
-            '${provider.stops.where((s) => s.isDelivered).length}',
+            '${provider.deliveredCount}',
             r,
           ),
           _buildResultRow(
@@ -1269,7 +1285,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             ),
           ),
           SizedBox(height: r.space(10)),
-          ...provider.stops.asMap().entries.map((e) => Container(
+          ...provider.selectedStops.asMap().entries.map((e) => Container(
             margin: EdgeInsets.only(bottom: r.space(6)),
             padding: EdgeInsets.all(r.space(10)),
             decoration: BoxDecoration(
@@ -1281,23 +1297,19 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                 Container(
                   width: r.scale(26),
                   height: r.scale(26),
-                  decoration: BoxDecoration(
-                    color: e.value.isDelivered
-                        ? const Color(0xFF00c853)
-                        : Colors.white,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
-                    child: e.value.isDelivered
-                        ? Icon(Icons.check, color: Colors.white, size: r.iconSize(14))
-                        : Text(
-                            '${e.key + 1}',
-                            style: GoogleFonts.poppins(
-                              color: const Color(0xFF1a237e),
-                              fontWeight: FontWeight.bold,
-                              fontSize: r.fontSize(12),
-                            ),
-                          ),
+                    child: Text(
+                      '${e.key + 1}',
+                      style: GoogleFonts.poppins(
+                        color: const Color(0xFF1a237e),
+                        fontWeight: FontWeight.bold,
+                        fontSize: r.fontSize(12),
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(width: r.space(10)),
@@ -1312,22 +1324,6 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (e.value.isDelivered)
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: r.space(8), vertical: r.space(4)),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00c853),
-                      borderRadius: BorderRadius.circular(r.radius(8)),
-                    ),
-                    child: Text(
-                      'Livré',
-                      style: GoogleFonts.poppins(
-                        fontSize: r.fontSize(10),
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
               ],
             ),
           )),
@@ -1551,7 +1547,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         return FlutterMap(
           mapController: _mapController,
           options: MapOptions(
-            initialCenter: livreurProvider.currentPosition ?? _defaultCenter,
+            initialCenter: livreurProvider.currentPosition ?? const LatLng(34.74, 10.76),
             initialZoom: 12,
           ),
           children: [
@@ -2122,9 +2118,83 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     );
   }
 
+  // ================== LOCATION HELPERS ==================
+
+  /// Shows a dialog asking the user to enable location services.
+  void _showLocationRequiredDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(10)),
+            child: Icon(Icons.location_off, color: Colors.red.shade700),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(child: Text('Position requise')),
+        ]),
+        content: Text(
+          'Veuillez activer la localisation pour utiliser la carte et calculer les trajets.',
+          style: GoogleFonts.poppins(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Annuler', style: GoogleFonts.poppins(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Geolocator.openLocationSettings();
+              // After returning from settings, retry initialization
+              await Future.delayed(const Duration(seconds: 1));
+              if (mounted) _initializeMap();
+            },
+            icon: const Icon(Icons.settings, size: 18),
+            label: Text('Activer', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1a237e),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Returns true if location is available, otherwise shows a snackbar + opens settings.
+  Future<bool> _checkLocationOrWarn() async {
+    final livreurProvider = context.read<LivreurProvider>();
+
+    // Always do a fresh check — position may be stale if GPS was disabled
+    final serviceEnabled = await livreurProvider.checkLocationService();
+    if (!serviceEnabled) {
+      if (mounted) _showLocationRequiredDialog();
+      return false;
+    }
+
+    // If position is null, try getting it
+    if (livreurProvider.currentPosition == null) {
+      final pos = await livreurProvider.getCurrentPosition();
+      if (pos != null) {
+        context.read<DeliveryRouteProvider>().setStartPosition(pos);
+        return true;
+      }
+      if (mounted) _showLocationRequiredDialog();
+      return false;
+    }
+
+    return true;
+  }
+
   // ================== ACTIONS ==================
 
   Future<void> _optimizeCollectionRoute() async {
+    if (!await _checkLocationOrWarn()) return;
     setState(() {
       _isOptimizing = true;
       _optimizationProgress = 0;
@@ -2170,6 +2240,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   }
 
   Future<void> _optimizeRoute() async {
+    if (!await _checkLocationOrWarn()) return;
     setState(() {
       _isOptimizing = true;
       _optimizationProgress = 0;
@@ -2219,9 +2290,36 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   }
 
   Future<void> _markCollected(CollectionStop stop, DeliveryRouteProvider routeProvider, OrderProvider orderProvider) async {
+    // Only show uncollected items
+    final uncollectedIndices = <int>[];
+    for (int i = 0; i < stop.items.length; i++) {
+      if (!stop.items[i].isCollected) {
+        uncollectedIndices.add(i);
+      }
+    }
+
+    if (uncollectedIndices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Tous les articles de ce dépôt ont déjà été collectés.'),
+          backgroundColor: Colors.orange.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    // Track which uncollected items are selected (all checked by default)
+    final selectedItems = <int, bool>{};
+    for (final idx in uncollectedIndices) {
+      selectedItems[idx] = true;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(children: [
           Container(
@@ -2232,77 +2330,129 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
           const SizedBox(width: 12),
           Expanded(child: Text('Collecte - ${stop.depotName}')),
         ]),
-        content: Column(
+        content: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('CMD ${stop.orderIds.map((id) => '#$id').join(', ')}'),
+            if (stop.items.any((i) => i.isCollected)) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${stop.items.where((i) => i.isCollected).length} article(s) déjà collecté(s)',
+                style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontStyle: FontStyle.italic),
+              ),
+            ],
             const SizedBox(height: 12),
-            ...stop.items.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(children: [
-                const Icon(Icons.check_box_outline_blank, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Expanded(child: Text('${item.name} x${item.quantity} (CMD #${item.orderId})')),
-              ]),
-            )),
-            const SizedBox(height: 12),
-            const Text('Articles collectés de ce dépôt ?', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('Cochez les articles collectés :', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ...uncollectedIndices.map((idx) {
+              final item = stop.items[idx];
+              final isChecked = selectedItems[idx] ?? true;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: InkWell(
+                  onTap: () => setDialogState(() => selectedItems[idx] = !isChecked),
+                  child: Row(children: [
+                    Icon(
+                      isChecked ? Icons.check_box : Icons.check_box_outline_blank,
+                      size: 20,
+                      color: isChecked ? const Color(0xFF00c853) : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(
+                      '${item.name} x${item.quantity} (CMD #${item.orderId})',
+                      style: TextStyle(
+                        decoration: isChecked ? null : TextDecoration.lineThrough,
+                        color: isChecked ? null : Colors.grey,
+                      ),
+                    )),
+                  ]),
+                ),
+              );
+            }),
           ],
+        ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Non')),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: selectedItems.values.any((v) => v)
+                ? () => Navigator.pop(context, true)
+                : null,
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00c853)),
             child: const Text('Oui, collecté', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
+      ),
     );
 
     if (confirmed == true && mounted) {
-      // Mark this depot stop as collected
-      routeProvider.markCollectionStopCollected(stop.id);
-      
-      // Check each order served by this depot — if fully collected, move to delivery
-      final fullyCollectedOrderIds = <int>[];
-      for (final orderId in stop.orderIds) {
-        if (routeProvider.isOrderFullyCollected(orderId)) {
-          fullyCollectedOrderIds.add(orderId);
+      // Collect the indices of selected items
+      final collectedIndices = <int>{};
+      final Map<int, List<Map<String, dynamic>>> orderItemsMap = {};
+      for (final idx in uncollectedIndices) {
+        if (selectedItems[idx] == true) {
+          collectedIndices.add(idx);
+          final item = stop.items[idx];
+          orderItemsMap.putIfAbsent(item.orderId, () => []);
+          orderItemsMap[item.orderId]!.add({
+            'produitId': item.produitId,
+            'quantity': item.quantity,
+          });
         }
       }
+
+      // Mark individual items as collected (not the entire stop)
+      routeProvider.markCollectionItemsCollected(stop.id, collectedIndices);
       
-      for (final orderId in fullyCollectedOrderIds) {
-        final success = await orderProvider.markAsCollected(orderId);
+      // For each order that has selected items, send them to backend
+      final fullyCollectedOrderIds = <int>[];
+      for (final entry in orderItemsMap.entries) {
+        final orderId = entry.key;
+        final items = entry.value;
+        final success = await orderProvider.markItemsCollected(orderId, items);
         if (success && mounted) {
-          // Find the order object
-          final order = stop.orders.firstWhere(
-            (o) => o.id == orderId,
-            orElse: () => Order(id: orderId, clientId: 0),
-          ).copyWith(collected: true);
+          // Get the updated order with fresh collectedQuantity values
+          final updatedOrders = orderProvider.myOrders.where((o) => o.id == orderId).toList();
+          if (updatedOrders.isNotEmpty) {
+            // Keep _allAvailableOrders in sync so recompute uses fresh data
+            routeProvider.updateAvailableOrder(updatedOrders.first);
+          }
+          // Refresh collection stops/items state for this order so fully collected
+          // orders are removed from the "Dépôts à visiter" list immediately.
+          if (updatedOrders.isNotEmpty && updatedOrders.first.id != null) {
+            routeProvider.refreshOrderCollectionStatus(updatedOrders.first.id!);
+          }
+          final isFullyCollected = updatedOrders.isNotEmpty && updatedOrders.first.collected == true;
           
-          if (order.latitudeLivraison != null && order.longitudeLivraison != null) {
-            routeProvider.addStop(DeliveryStop(
-              id: order.id ?? 0,
-              name: order.clientNom ?? 'Client ${order.clientId}',
-              address: order.adresseLivraison ?? '',
-              position: LatLng(order.latitudeLivraison!, order.longitudeLivraison!),
-              order: order,
-            ));
-          } else if (order.clientLatitude != null && order.clientLongitude != null) {
-            routeProvider.addStop(DeliveryStop(
-              id: order.id ?? 0,
-              name: order.clientNom ?? 'Client ${order.clientId}',
-              address: order.adresseLivraison ?? '',
-              position: LatLng(order.clientLatitude!, order.clientLongitude!),
-              order: order,
-            ));
+          if (isFullyCollected) {
+            fullyCollectedOrderIds.add(orderId);
+            final updatedOrder = updatedOrders.first;
+            final lat = updatedOrder.latitudeLivraison ?? updatedOrder.clientLatitude;
+            final lon = updatedOrder.longitudeLivraison ?? updatedOrder.clientLongitude;
+            if (lat != null && lon != null) {
+              routeProvider.addStop(DeliveryStop(
+                id: updatedOrder.id ?? 0,
+                name: updatedOrder.clientNom ?? 'Client ${updatedOrder.clientId}',
+                address: updatedOrder.adresseLivraison ?? '',
+                position: LatLng(lat, lon),
+                order: updatedOrder,
+              ));
+            }
           }
         }
       }
+      // Remove fully collected orders from the current selection so counts update
+      if (fullyCollectedOrderIds.isNotEmpty) {
+        routeProvider.removeSelectedCollectionIds(fullyCollectedOrderIds.toSet());
+      }
       
       if (mounted) {
+        final selectedCount = collectedIndices.length;
+        final totalUncollected = uncollectedIndices.length;
+        
         if (fullyCollectedOrderIds.isNotEmpty) {
           final cmdList = fullyCollectedOrderIds.map((id) => '#$id').join(', ');
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2318,16 +2468,30 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
               duration: const Duration(seconds: 3),
             ),
           );
-        } else {
-          // Partial — depot collected but orders not fully done yet
+        } else if (selectedCount < totalUncollected) {
+          // Partial — some items collected, some remain
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(children: [
                 const Text('✅'),
                 const SizedBox(width: 8),
-                Expanded(child: Text('${stop.depotName} collecté!')),
+                Expanded(child: Text('${stop.depotName}: $selectedCount/$totalUncollected article(s) collecté(s). Revenez pour le reste.')),
               ]),
               backgroundColor: Colors.orange.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(children: [
+                const Text('✅'),
+                const SizedBox(width: 8),
+                Expanded(child: Text('${stop.depotName}: tous les articles collectés!')),
+              ]),
+              backgroundColor: const Color(0xFF00c853),
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               duration: const Duration(seconds: 3),
@@ -2338,21 +2502,6 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
         // If ALL collection stops done, switch to deliver tab
         if (routeProvider.collectionStops.every((s) => s.isCollected)) {
           _tabController.animateTo(1);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Row(children: [
-                  Text('🎉'),
-                  SizedBox(width: 8),
-                  Text('Toutes les collectes terminées! Passez aux livraisons.'),
-                ]),
-                backgroundColor: AppColors.primary,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
         }
       }
     }
@@ -2405,17 +2554,17 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
               Container(
                 width: 50, height: 50,
                 decoration: BoxDecoration(
-                  color: stop.isDelivered ? AppColors.success : AppColors.primary,
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(stop.isDelivered ? Icons.check : Icons.location_on, color: Colors.white),
+                child: const Icon(Icons.location_on, color: Colors.white),
               ),
               const SizedBox(width: 16),
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(stop.name, style: AppStyles.headingSmall),
-                  Text(stop.isDelivered ? 'Livré ✓' : 'En attente', style: AppStyles.bodySmall.copyWith(color: stop.isDelivered ? AppColors.success : Colors.orange)),
+                  Text('En attente de livraison', style: AppStyles.bodySmall.copyWith(color: Colors.orange)),
                 ],
               )),
             ]),
@@ -2428,21 +2577,20 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
             if (stop.order.montantTTC != null)
               _buildDetailRow(Icons.attach_money, 'Montant', '${stop.order.montantTTC!.toStringAsFixed(2)} TND'),
             const SizedBox(height: 24),
-            if (!stop.isDelivered)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () { Navigator.pop(context); _markDelivered(stop); },
-                  icon: const Icon(Icons.check_circle),
-                  label: const Text('Marquer comme livré'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () { Navigator.pop(context); _markDelivered(stop); },
+                icon: const Icon(Icons.local_shipping),
+                label: const Text('Confirmer la livraison'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00c853),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
+            ),
           ],
         ),
       ),
@@ -2521,6 +2669,73 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
   }
 
   Future<void> _markDelivered(DeliveryStop stop) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(color: const Color(0xFF00c853).withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.local_shipping, color: Color(0xFF00c853)),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(child: Text('Confirmer la livraison')),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Confirmez-vous la livraison de cette commande ?',
+              style: GoogleFonts.poppins(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(children: [
+                const Icon(Icons.person, size: 20, color: Color(0xFF1a237e)),
+                const SizedBox(width: 8),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(stop.name, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text('CMD #${stop.order.id}', style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600)),
+                    if (stop.order.montantTTC != null)
+                      Text('${stop.order.montantTTC!.toStringAsFixed(2)} TND', style: GoogleFonts.poppins(fontSize: 12, color: Colors.orange.shade700, fontWeight: FontWeight.w600)),
+                  ],
+                )),
+              ]),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Annuler', style: GoogleFonts.poppins(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.check, size: 18),
+            label: Text('Confirmer', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00c853),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
     final routeProvider = context.read<DeliveryRouteProvider>();
     final orderProvider = context.read<OrderProvider>();
     
@@ -2540,22 +2755,25 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
     
     final success = await orderProvider.markAsDelivered(stop.order.id!, distanceKm: distanceKm);
     
-    if (success) {
+    if (success && mounted) {
       routeProvider.markStopAsDelivered(stop.id);
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${stop.name} - Livraison confirmée ✓'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-        
-        if (routeProvider.allDelivered) {
-          _showCompletionDialog();
-        }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Expanded(child: Text('${stop.name} (CMD #${stop.order.id}) — Livré avec succès')),
+          ]),
+          backgroundColor: const Color(0xFF00c853),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      
+      if (routeProvider.allDelivered) {
+        _showCompletionDialog();
       }
     }
   }
@@ -2581,7 +2799,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     Column(children: [
-                      Text('${provider.stops.length}', style: AppStyles.headingLarge),
+                      Text('${provider.deliveredCount}', style: AppStyles.headingLarge),
                       Text('Livraisons', style: AppStyles.caption),
                     ]),
                     Column(children: [

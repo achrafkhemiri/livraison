@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_styles.dart';
@@ -43,7 +45,12 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
       ]);
       
       // Start position tracking
-      await livreurProvider.startPositionTracking();
+      final trackingStarted = await livreurProvider.startPositionTracking();
+
+      // If location is not available, show a dialog
+      if (!trackingStarted && mounted) {
+        _showLocationRequiredDialog();
+      }
 
       // Start notification polling
       if (mounted) {
@@ -67,6 +74,53 @@ class _LivreurHomeScreenState extends State<LivreurHomeScreen> with SingleTicker
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _showLocationRequiredDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(10)),
+            child: Icon(Icons.location_off, color: Colors.red.shade700),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(child: Text('Position requise')),
+        ]),
+        content: Text(
+          'Pour utiliser l\'application, veuillez activer votre localisation.',
+          style: GoogleFonts.poppins(fontSize: 14),
+        ),
+        actions: [
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Geolocator.openLocationSettings();
+              // Retry after returning from settings
+              await Future.delayed(const Duration(seconds: 1));
+              if (mounted) {
+                final livreurProvider = context.read<LivreurProvider>();
+                final started = await livreurProvider.startPositionTracking();
+                if (!started && mounted) {
+                  _showLocationRequiredDialog();
+                }
+              }
+            },
+            icon: const Icon(Icons.settings, size: 18),
+            label: Text('Activer la position', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1a237e),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openNotifications() {

@@ -59,6 +59,9 @@ public class OrderItem {
     @Column(name = "remise", precision = 38, scale = 2)
     private BigDecimal remise;
     
+    @Column(name = "collected_quantity")
+    private Integer collectedQuantity;
+    
     @Column(name = "version")
     private Integer version = 1;
     

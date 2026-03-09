@@ -290,6 +290,7 @@
   padding: 14px 20px;
   border-bottom: 1px solid #f5f5f5;
   transition: background 0.2s;
+  cursor: pointer;
 }
 
 .notification-item:hover {

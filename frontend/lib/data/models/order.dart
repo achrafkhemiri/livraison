@@ -222,6 +222,7 @@ class OrderItem {
   final String? produitNom;
   final String? produitDesignation;
   final int quantite;
+  final int? collectedQuantity;
   final double? prixUnitaireHT;
   final double? prixUnitaireTTC;
   final double? remise;
@@ -237,6 +238,7 @@ class OrderItem {
     this.produitNom,
     this.produitDesignation,
     required this.quantite,
+    this.collectedQuantity,
     this.prixUnitaireHT,
     this.prixUnitaireTTC,
     this.remise,
@@ -249,6 +251,9 @@ class OrderItem {
   // Helper to get product name from any available field
   String get displayName => produitDesignation ?? produitNom ?? produitCode ?? 'Produit #$produitId';
 
+  /// How many units still need to be collected
+  int get remainingQuantity => quantite - (collectedQuantity ?? 0);
+
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     return OrderItem(
       id: json['id'],
@@ -257,6 +262,7 @@ class OrderItem {
       produitNom: json['produitNom'],
       produitDesignation: json['produitDesignation'],
       quantite: json['quantite'] ?? 0,
+      collectedQuantity: json['collectedQuantity'],
       prixUnitaireHT: json['prixUnitaireHT']?.toDouble(),
       prixUnitaireTTC: json['prixUnitaireTTC']?.toDouble(),
       remise: json['remise']?.toDouble(),

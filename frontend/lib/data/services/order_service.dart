@@ -105,6 +105,12 @@ class OrderService {
     return Order.fromJson(response);
   }
 
+  /// Mark specific items as collected for an order (partial collection)
+  Future<Order> markItemsCollected(int orderId, List<Map<String, dynamic>> items) async {
+    final response = await _api.postList('${ApiConstants.orders}/$orderId/collected-items', items);
+    return Order.fromJson(response);
+  }
+
   // ===== Assignment workflow =====
 
   /// Accept proposed assignment (livreur)

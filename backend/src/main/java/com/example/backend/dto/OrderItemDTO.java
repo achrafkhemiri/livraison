@@ -30,4 +30,5 @@ public class OrderItemDTO {
     private BigDecimal montantTVA;
     private BigDecimal montantTTC;
     private BigDecimal remise;
+    private Integer collectedQuantity;
 }

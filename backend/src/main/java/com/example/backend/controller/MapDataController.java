@@ -3,6 +3,7 @@ package com.example.backend.controller;
 import com.example.backend.dto.MapDataDTO;
 import com.example.backend.dto.OrderDTO;
 import com.example.backend.dto.ProductStockInfoDTO;
+import com.example.backend.dto.CollectedItemDTO;
 import com.example.backend.service.MapDataService;
 import com.example.backend.service.OrderService;
 import com.example.backend.service.SecurityService;
@@ -103,6 +104,21 @@ public class MapDataController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return ResponseEntity.ok(orderService.markAsCollected(orderId));
+    }
+
+    /**
+     * Mark specific items as collected for an order (partial collection)
+     */
+    @PostMapping("/orders/{orderId}/collected-items")
+    @PreAuthorize("hasAnyRole('GERANT', 'LIVREUR')")
+    public ResponseEntity<OrderDTO> markItemsCollected(
+            @PathVariable Long orderId,
+            @RequestBody List<CollectedItemDTO> items) {
+        Long societeId = securityService.getCurrentUserSocieteId();
+        if (societeId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        return ResponseEntity.ok(orderService.markItemsCollected(orderId, items));
     }
 
     /**

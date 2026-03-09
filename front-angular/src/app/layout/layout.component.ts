@@ -85,6 +85,15 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.showNotifications = false;
   }
 
+  markAsRead(notif: AppNotification): void {
+    if (notif.isRead) return;
+    if (notif.id == null) return;
+    this.notificationService.markAsRead(notif.id).subscribe(() => {
+      notif.isRead = true;
+      this.unreadCount = Math.max(0, this.unreadCount - 1);
+    });
+  }
+
   markAllAsRead(): void {
     this.notificationService.markAllAsRead().subscribe(() => {
       this.notifications.forEach(n => n.isRead = true);

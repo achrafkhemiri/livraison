@@ -35,7 +35,8 @@ public class OrderItemMapper {
                 .montantHT(montantHT)
                 .montantTVA(item.getMontantTVA())
                 .montantTTC(item.getMontantTTC() != null ? item.getMontantTTC() : montantHT)
-                .remise(item.getRemise());
+                .remise(item.getRemise())
+                .collectedQuantity(item.getCollectedQuantity());
         
         if (item.getOrder() != null) {
             builder.orderId(item.getOrder().getId());

@@ -52,8 +52,13 @@ class CollectionItem {
   final String name;
   final int quantity;
   final int orderId; // which order this item belongs to
+  final int produitId; // product ID for partial collection
+  bool isCollected; // whether this item has been collected
   
-  CollectionItem({required this.name, required this.quantity, required this.orderId});
+  CollectionItem({required this.name, required this.quantity, required this.orderId, this.produitId = 0, this.isCollected = false});
+
+  /// Uncollected items for display
+  List<CollectionItem> get uncollectedItems => isCollected ? [] : [this];
 }
 
 /// The active mode in the map: collect from depots or deliver to clients
@@ -89,6 +94,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
   bool _usedOsrmGeometry = false; // Tracks if OSRM geometry was actually used
   String? _errorMessage;
   int _currentStopIndex = 0;
+  int _deliveredCount = 0;
   
   // ====== Live Tracking State ======
   bool _isLiveTracking = false;
@@ -126,6 +132,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
   bool get usedOsrmGeometry => _usedOsrmGeometry; // Expose the flag
   String? get errorMessage => _errorMessage;
   int get currentStopIndex => _currentStopIndex;
+  int get deliveredCount => _deliveredCount;
   
   // Collection getters
   List<CollectionStop> get collectionStops => _collectionStops;
@@ -686,16 +693,15 @@ class DeliveryRouteProvider extends ChangeNotifier {
     _totalDuration = (_totalDistance / 1000) / 30 * 3600;
   }
   
-  // Mark a stop as delivered
+  // Mark a stop as delivered and remove it from the list
   void markStopAsDelivered(int orderId) {
-    final stopIndex = _stops.indexWhere((s) => s.id == orderId);
-    if (stopIndex != -1) {
-      _stops[stopIndex].isDelivered = true;
-      if (_currentStopIndex < _stops.length - 1) {
-        _currentStopIndex++;
-      }
-      notifyListeners();
+    _stops.removeWhere((s) => s.id == orderId);
+    _selectedStopIds.remove(orderId);
+    _deliveredCount++;
+    if (_currentStopIndex >= _stops.length && _stops.isNotEmpty) {
+      _currentStopIndex = _stops.length - 1;
     }
+    notifyListeners();
   }
   
   // Get next stop
@@ -707,10 +713,10 @@ class DeliveryRouteProvider extends ChangeNotifier {
   }
   
   // Check if all stops are delivered
-  bool get allDelivered => _stops.every((s) => s.isDelivered);
+  bool get allDelivered => _stops.isEmpty;
   
   // Get remaining stops count
-  int get remainingStopsCount => _stops.where((s) => !s.isDelivered).length;
+  int get remainingStopsCount => _stops.length;
   
   // Reset route (clears everything)
   void resetRoute() {
@@ -720,6 +726,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
     _totalDistance = 0;
     _totalDuration = 0;
     _currentStopIndex = 0;
+    _deliveredCount = 0;
     _errorMessage = null;
     _usedOsrmGeometry = false;
     _resetLiveTrackingState();
@@ -973,17 +980,38 @@ class DeliveryRouteProvider extends ChangeNotifier {
       final stepOrderIds = (step['orderIds'] as List? ?? [])
           .map((e) => (e as num).toInt()).toList();
 
-      final items = (step['items'] as List? ?? []).map((item) => CollectionItem(
-        name: item['produitNom'] ?? 'Produit',
-        quantity: (item['quantite'] as num?)?.toInt() ?? 0,
-        orderId: (item['orderId'] as num?)?.toInt() ?? 0,
-      )).toList();
+      final items = (step['items'] as List? ?? []).map((item) {
+        final produitId = (item['produitId'] as num?)?.toInt() ?? 0;
+        final orderId = (item['orderId'] as num?)?.toInt() ?? 0;
+        final qty = (item['quantite'] as num?)?.toInt() ?? 0;
+
+        // Check if this item is already collected by looking at order items' collectedQuantity
+        bool alreadyCollected = false;
+        final order = availableOrders.where((o) => o.id == orderId).firstOrNull;
+        if (order != null && order.items != null) {
+          final orderItem = order.items!.where((oi) => oi.produitId == produitId).firstOrNull;
+          if (orderItem != null && (orderItem.collectedQuantity ?? 0) >= orderItem.quantite) {
+            alreadyCollected = true;
+          }
+        }
+
+        return CollectionItem(
+          name: item['produitNom'] ?? 'Produit',
+          quantity: qty,
+          orderId: orderId,
+          produitId: produitId,
+          isCollected: alreadyCollected,
+        );
+      }).toList();
 
       // Resolve order objects for this depot
       final stepOrders = stepOrderIds
           .map((oid) => availableOrders.where((o) => o.id == oid).firstOrNull)
           .whereType<Order>()
           .toList();
+
+      // Check if ALL items in this stop are already collected
+      final allItemsCollected = items.isNotEmpty && items.every((i) => i.isCollected);
 
       _collectionStops.add(CollectionStop(
         id: depotId,
@@ -996,6 +1024,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
         items: items,
         orderIds: stepOrderIds,
         orders: stepOrders,
+        isCollected: allItemsCollected,
       ));
     }
   }
@@ -1014,11 +1043,29 @@ class DeliveryRouteProvider extends ChangeNotifier {
 
         final depotId = (step['depotId'] as num).toInt();
 
-        final items = (step['items'] as List? ?? []).map((item) => CollectionItem(
-          name: item['produitNom'] ?? 'Produit',
-          quantity: (item['quantite'] as num?)?.toInt() ?? 0,
-          orderId: order.id ?? 0,
-        )).toList();
+        final items = (step['items'] as List? ?? []).map((item) {
+          final produitId = (item['produitId'] as num?)?.toInt() ?? 0;
+          final qty = (item['quantite'] as num?)?.toInt() ?? 0;
+
+          // Check if already collected
+          bool alreadyCollected = false;
+          if (order.items != null) {
+            final orderItem = order.items!.where((oi) => oi.produitId == produitId).firstOrNull;
+            if (orderItem != null && (orderItem.collectedQuantity ?? 0) >= orderItem.quantite) {
+              alreadyCollected = true;
+            }
+          }
+
+          return CollectionItem(
+            name: item['produitNom'] ?? 'Produit',
+            quantity: qty,
+            orderId: order.id ?? 0,
+            produitId: produitId,
+            isCollected: alreadyCollected,
+          );
+        }).toList();
+
+        final allItemsCollected = items.isNotEmpty && items.every((i) => i.isCollected);
 
         _collectionStops.add(CollectionStop(
           id: depotId,
@@ -1031,6 +1078,7 @@ class DeliveryRouteProvider extends ChangeNotifier {
           items: items,
           orderIds: [order.id!],
           orders: [order],
+          isCollected: allItemsCollected,
         ));
       }
     } catch (e) {
@@ -1096,6 +1144,16 @@ class DeliveryRouteProvider extends ChangeNotifier {
     _collectionDistance = 0;
     _collectionDuration = 0;
     notifyListeners();
+  }
+
+  /// Remove a set of order IDs from the current selection (used when orders
+  /// become fully collected and should no longer be part of the collection plan).
+  void removeSelectedCollectionIds(Set<int> ids) {
+    var changed = false;
+    for (final id in ids) {
+      if (_selectedCollectionIds.remove(id)) changed = true;
+    }
+    if (changed) notifyListeners();
   }
   
   // Calculate optimized collection route using OSRM /trip + 2-opt + or-opt
@@ -1300,6 +1358,71 @@ class DeliveryRouteProvider extends ChangeNotifier {
       _collectionStops[idx].isCollected = true;
       notifyListeners();
     }
+  }
+
+  /// Mark specific items in a collection stop as collected (by index).
+  /// If all items are now collected, automatically marks the stop as collected.
+  void markCollectionItemsCollected(int stopId, Set<int> itemIndices) {
+    final idx = _collectionStops.indexWhere((s) => s.id == stopId);
+    if (idx != -1) {
+      final stop = _collectionStops[idx];
+      for (final i in itemIndices) {
+        if (i >= 0 && i < stop.items.length) {
+          stop.items[i].isCollected = true;
+        }
+      }
+      // Auto-mark the stop as collected if all items are done
+      if (stop.items.every((item) => item.isCollected)) {
+        stop.isCollected = true;
+      }
+      notifyListeners();
+    }
+  }
+
+  /// Update an order in _allAvailableOrders so that recompute uses fresh data
+  /// (e.g. after marking items collected, the order's items have updated collectedQuantity).
+  void updateAvailableOrder(Order updatedOrder) {
+    final idx = _allAvailableOrders.indexWhere((o) => o.id == updatedOrder.id);
+    if (idx != -1) {
+      _allAvailableOrders[idx] = updatedOrder;
+    }
+  }
+
+  /// Re-evaluate collection stops/items for a specific order using fresh
+  /// data from `_allAvailableOrders`. This ensures stops disappear when an
+  /// order becomes fully collected.
+  void refreshOrderCollectionStatus(int orderId) {
+    // Find the fresh order object
+    final order = _allAvailableOrders.where((o) => o.id == orderId).firstOrNull;
+    if (order == null) return;
+
+    // For each collection stop, update its items' isCollected flags when
+    // they belong to this order, based on the order's item.collectedQuantity.
+    bool changed = false;
+    for (final stop in _collectionStops) {
+      for (final item in stop.items) {
+        if (item.orderId == orderId) {
+          final oi = order.items?.where((x) => x.produitId == item.produitId).firstOrNull;
+          final was = item.isCollected;
+          if (oi != null && (oi.collectedQuantity ?? 0) >= oi.quantite) {
+            item.isCollected = true;
+          } else {
+            item.isCollected = false;
+          }
+          if (was != item.isCollected) changed = true;
+        }
+      }
+      // Recompute stop collected state
+      final wasStop = stop.isCollected;
+      if (stop.items.isNotEmpty && stop.items.every((i) => i.isCollected)) {
+        stop.isCollected = true;
+      } else {
+        stop.isCollected = false;
+      }
+      if (wasStop != stop.isCollected) changed = true;
+    }
+
+    if (changed) notifyListeners();
   }
   
   // Check if all depot stops containing an order are collected
