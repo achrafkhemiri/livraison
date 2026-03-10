@@ -3,7 +3,8 @@ import { CommissionService } from '../../services/commission.service';
 import {
   CommissionConfig,
   CommissionPaiement,
-  LivreurCommissionSummary
+  LivreurCommissionSummary,
+  BilanDTO
 } from '../../models/commission.model';
 
 @Component({
@@ -13,7 +14,7 @@ import {
 })
 export class CommissionsComponent implements OnInit {
   // Tabs
-  activeTab: 'summary' | 'paiements' | 'configs' = 'summary';
+  activeTab: 'summary' | 'paiements' | 'configs' | 'bilan' = 'summary';
 
   // Data
   summaries: LivreurCommissionSummary[] = [];
@@ -60,18 +61,32 @@ export class CommissionsComponent implements OnInit {
   configForm: Partial<CommissionConfig> = {};
   configLivreurNom = '';
 
+  // Bilan
+  bilanData: BilanDTO | null = null;
+  bilanLoading = false;
+  bilanAnnee: number = 0;
+  bilanMois: number = 0;
+  bilanAnneesDisponibles: number[] = [];
+
+  // Frais livraison (loaded once for résultat column)
+  fraisLivraison: number = 0;
+
   constructor(private commissionService: CommissionService) {}
 
   ngOnInit(): void {
     this.loadSummaries();
+    this.commissionService.getBilan().subscribe({
+      next: (data) => { this.fraisLivraison = data.fraisLivraisonUnitaire || 0; }
+    });
   }
 
   // ── Tab switching ───────────────────────────────────────
-  switchTab(tab: 'summary' | 'paiements' | 'configs'): void {
+  switchTab(tab: 'summary' | 'paiements' | 'configs' | 'bilan'): void {
     this.activeTab = tab;
     if (tab === 'summary') this.loadSummaries();
     else if (tab === 'paiements') { this.pCurrentPage = 0; this.loadPaiements(); }
     else if (tab === 'configs') { this.cCurrentPage = 0; this.loadConfigs(); }
+    else if (tab === 'bilan') this.loadBilan();
   }
 
   // ── Data loading ────────────────────────────────────────
@@ -265,6 +280,7 @@ export class CommissionsComponent implements OnInit {
     if (this.activeTab === 'summary') this.loadSummaries();
     else if (this.activeTab === 'paiements') this.loadPaiements();
     else if (this.activeTab === 'configs') this.loadConfigs();
+    else if (this.activeTab === 'bilan') this.loadBilan();
     // Refresh detail if open
     if (this.showDetail && this.selectedSummary) {
       this.loadDetailPaiements();
@@ -302,5 +318,31 @@ export class CommissionsComponent implements OnInit {
         alert('Erreur lors du recalcul des distances.');
       }
     });
+  }
+
+  // ── Bilan ───────────────────────────────────────────────
+  loadBilan(): void {
+    this.bilanLoading = true;
+    // Load available years if not yet loaded
+    if (this.bilanAnneesDisponibles.length === 0) {
+      this.commissionService.getAnneesDisponibles().subscribe({
+        next: (annees) => { this.bilanAnneesDisponibles = annees; }
+      });
+    }
+    const annee = this.bilanAnnee > 0 ? this.bilanAnnee : undefined;
+    const mois = this.bilanMois > 0 ? this.bilanMois : undefined;
+    this.commissionService.getBilan(annee, mois).subscribe({
+      next: (data) => { this.bilanData = data; this.bilanLoading = false; },
+      error: () => { this.bilanLoading = false; }
+    });
+  }
+
+  onBilanAnneeChange(): void {
+    if (this.bilanAnnee === 0) this.bilanMois = 0;
+    this.loadBilan();
+  }
+
+  onBilanMoisChange(): void {
+    this.loadBilan();
   }
 }

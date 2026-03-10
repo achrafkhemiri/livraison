@@ -3,8 +3,10 @@ package com.example.backend.controller;
 import com.example.backend.dto.CommissionConfigDTO;
 import com.example.backend.dto.CommissionPaiementDTO;
 import com.example.backend.dto.LivreurCommissionSummaryDTO;
+import com.example.backend.dto.BilanDTO;
 import com.example.backend.dto.PageResponse;
 import com.example.backend.service.CommissionService;
+import com.example.backend.service.SecurityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +23,7 @@ import java.util.List;
 public class CommissionController {
 
     private final CommissionService commissionService;
+    private final SecurityService securityService;
 
     // ═══════════════════════════════════════════════════════
     //  Commission Config endpoints
@@ -193,5 +196,31 @@ public class CommissionController {
     @PreAuthorize("hasRole('GERANT')")
     public ResponseEntity<LivreurCommissionSummaryDTO> getLivreurSummary(@PathVariable Long livreurId) {
         return ResponseEntity.ok(commissionService.getLivreurSummary(livreurId));
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Bilan Financier
+    // ═══════════════════════════════════════════════════════
+
+    @GetMapping("/bilan")
+    @PreAuthorize("hasRole('GERANT')")
+    public ResponseEntity<BilanDTO> getBilan(
+            @RequestParam(required = false) Integer annee,
+            @RequestParam(required = false) Integer mois) {
+        Long societeId = securityService.getCurrentUserSocieteId();
+        if (societeId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(commissionService.getBilan(societeId, annee, mois));
+    }
+
+    @GetMapping("/bilan/annees")
+    @PreAuthorize("hasRole('GERANT')")
+    public ResponseEntity<List<Integer>> getAnneesDisponibles() {
+        Long societeId = securityService.getCurrentUserSocieteId();
+        if (societeId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(commissionService.getAnneesDisponibles(societeId));
     }
 }

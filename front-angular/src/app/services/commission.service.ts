@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { CommissionConfig, CommissionPaiement, LivreurCommissionSummary } from '../models/commission.model';
+import { CommissionConfig, CommissionPaiement, LivreurCommissionSummary, BilanDTO } from '../models/commission.model';
 import { PageResponse } from '../models/order.model';
 
 @Injectable({
@@ -123,5 +123,18 @@ export class CommissionService {
 
   recalculateAllDistances(): Observable<{ recalculated: number }> {
     return this.http.put<{ recalculated: number }>(`${this.apiUrl}/paiements/recalculate-all`, null);
+  }
+
+  // ── Bilan ───────────────────────────────────────────────
+
+  getBilan(annee?: number, mois?: number): Observable<BilanDTO> {
+    let params = new HttpParams();
+    if (annee != null && annee > 0) params = params.set('annee', annee.toString());
+    if (mois != null && mois > 0) params = params.set('mois', mois.toString());
+    return this.http.get<BilanDTO>(`${this.apiUrl}/bilan`, { params });
+  }
+
+  getAnneesDisponibles(): Observable<number[]> {
+    return this.http.get<number[]>(`${this.apiUrl}/bilan/annees`);
   }
 }

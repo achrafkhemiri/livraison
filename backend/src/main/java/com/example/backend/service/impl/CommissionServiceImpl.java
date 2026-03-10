@@ -3,6 +3,9 @@ package com.example.backend.service.impl;
 import com.example.backend.dto.CommissionConfigDTO;
 import com.example.backend.dto.CommissionPaiementDTO;
 import com.example.backend.dto.LivreurCommissionSummaryDTO;
+import com.example.backend.dto.BilanDTO;
+import com.example.backend.dto.BilanPeriodeDTO;
+import com.example.backend.dto.BilanLivreurDTO;
 import com.example.backend.dto.PageResponse;
 import com.example.backend.exception.BadRequestException;
 import com.example.backend.exception.ResourceNotFoundException;
@@ -40,6 +43,7 @@ public class CommissionServiceImpl implements CommissionService {
     private final CommissionPaiementRepository paiementRepository;
     private final UtilisateurRepository utilisateurRepository;
     private final OrderRepository orderRepository;
+    private final SocieteRepository societeRepository;
     private final CommissionMapper mapper;
     private final OsrmService osrmService;
 
@@ -656,5 +660,138 @@ public class CommissionServiceImpl implements CommissionService {
         double distance = earthRadius * c;
 
         return BigDecimal.valueOf(distance).setScale(3, RoundingMode.HALF_UP);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Bilan Financier
+    // ═══════════════════════════════════════════════════════
+
+    private static final String[] MOIS_LABELS = {
+            "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+            "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+    };
+
+    @Override
+    @Transactional(readOnly = true)
+    public BilanDTO getBilan(Long societeId, Integer annee, Integer mois) {
+        Societe societe = societeRepository.findById(societeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Société non trouvée"));
+
+        BigDecimal frais = societe.getFraisLivraison() != null
+                ? societe.getFraisLivraison() : BigDecimal.ZERO;
+
+        boolean hasAnnee = annee != null && annee > 0;
+        boolean validMois = mois != null && mois >= 1 && mois <= 12;
+
+        // Totaux globaux selon le filtre
+        Object[] totaux;
+        String periodeLabel;
+        if (hasAnnee && validMois) {
+            totaux = paiementRepository.getTotauxPourMois(societeId, annee, mois).get(0);
+            periodeLabel = MOIS_LABELS[mois] + " " + annee;
+        } else if (hasAnnee) {
+            totaux = paiementRepository.getTotauxPourAnnee(societeId, annee).get(0);
+            periodeLabel = "Année " + annee;
+        } else {
+            totaux = paiementRepository.getTotauxAllTime(societeId).get(0);
+            periodeLabel = "Toutes périodes";
+        }
+
+        long totalCommandes = ((Number) totaux[0]).longValue();
+        BigDecimal totalCommissions = (BigDecimal) totaux[1];
+        BigDecimal totalRevenu = frais.multiply(BigDecimal.valueOf(totalCommandes));
+        BigDecimal resultatNet = totalRevenu.subtract(totalCommissions);
+
+        // Bilan par mois
+        List<BilanPeriodeDTO> bilanParMois = buildBilanParMois(societeId, annee, hasAnnee, frais);
+
+        // Bilan par livreur
+        List<BilanLivreurDTO> bilanParLivreur = buildBilanParLivreur(
+                societeId, annee, mois, hasAnnee, validMois, frais);
+
+        return BilanDTO.builder()
+                .fraisLivraisonUnitaire(frais)
+                .periodeLabel(periodeLabel)
+                .totalCommandesLivrees(totalCommandes)
+                .totalRevenu(totalRevenu)
+                .totalCommissions(totalCommissions)
+                .resultatNet(resultatNet)
+                .rentable(resultatNet.compareTo(BigDecimal.ZERO) >= 0)
+                .bilanParMois(bilanParMois)
+                .bilanParLivreur(bilanParLivreur)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Integer> getAnneesDisponibles(Long societeId) {
+        return paiementRepository.findAnneesDisponibles(societeId);
+    }
+
+    private List<BilanPeriodeDTO> buildBilanParMois(Long societeId, Integer annee,
+                                                     boolean hasAnnee, BigDecimal frais) {
+        List<Object[]> rows = hasAnnee
+                ? paiementRepository.findBilanParMois(societeId, annee)
+                : paiementRepository.findBilanParMoisAllTime(societeId);
+
+        List<BilanPeriodeDTO> result = new ArrayList<>();
+        for (Object[] r : rows) {
+            int y = ((Number) r[0]).intValue();
+            int m = ((Number) r[1]).intValue();
+            long cnt = ((Number) r[2]).longValue();
+            BigDecimal comm = (BigDecimal) r[3];
+            BigDecimal rev = frais.multiply(BigDecimal.valueOf(cnt));
+            BigDecimal res = rev.subtract(comm);
+
+            result.add(BilanPeriodeDTO.builder()
+                    .annee(y).mois(m)
+                    .periodeLabel(MOIS_LABELS[m] + " " + y)
+                    .commandesLivrees(cnt)
+                    .revenu(rev)
+                    .commissions(comm)
+                    .resultat(res)
+                    .rentable(res.compareTo(BigDecimal.ZERO) >= 0)
+                    .build());
+        }
+        return result;
+    }
+
+    private List<BilanLivreurDTO> buildBilanParLivreur(Long societeId, Integer annee,
+                                                        Integer mois, boolean hasAnnee,
+                                                        boolean validMois, BigDecimal frais) {
+        List<Object[]> rows;
+        if (hasAnnee && validMois) {
+            rows = paiementRepository.findBilanParLivreurPourMois(societeId, annee, mois);
+        } else if (hasAnnee) {
+            rows = paiementRepository.findBilanParLivreurPourAnnee(societeId, annee);
+        } else {
+            rows = paiementRepository.findBilanParLivreurAllTime(societeId);
+        }
+
+        List<BilanLivreurDTO> result = new ArrayList<>();
+        int rang = 1;
+        for (Object[] r : rows) {
+            Long livreurId = ((Number) r[0]).longValue();
+            String nom = (String) r[1];
+            String prenom = (String) r[2];
+            long cnt = ((Number) r[3]).longValue();
+            BigDecimal comm = (BigDecimal) r[4];
+            BigDecimal rev = frais.multiply(BigDecimal.valueOf(cnt));
+            BigDecimal res = rev.subtract(comm);
+
+            String fullName = ((prenom != null ? prenom : "") + " " + (nom != null ? nom : "")).trim();
+
+            result.add(BilanLivreurDTO.builder()
+                    .rang(rang++)
+                    .livreurId(livreurId)
+                    .livreurNom(fullName)
+                    .commandesLivrees(cnt)
+                    .revenuGenere(rev)
+                    .commissionPayee(comm)
+                    .resultatNet(res)
+                    .rentable(res.compareTo(BigDecimal.ZERO) >= 0)
+                    .build());
+        }
+        return result;
     }
 }

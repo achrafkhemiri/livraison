@@ -14,6 +14,9 @@
     <button class="tab" [class.active]="activeTab === 'configs'" (click)="switchTab('configs')">
       <span class="material-icons">settings</span> Configurations
     </button>
+    <button class="tab" [class.active]="activeTab === 'bilan'" (click)="switchTab('bilan')">
+      <span class="material-icons">analytics</span> Bilan Financier
+    </button>
   </div>
 
   <!-- Search / Filters -->
@@ -125,6 +128,7 @@
             <th>Total Distance</th>
             <th>Formule</th>
             <th>Total</th>
+            <th>Résultat</th>
             <th>Statut</th>
             <th>Actions</th>
           </tr>
@@ -143,6 +147,12 @@
               <span class="formula">{{ p.montantFixe }} + ({{ p.distanceKm | number:'1.1-1' }} × {{ p.prixParKm }}) + {{ p.bonus }}</span>
             </td>
             <td><strong>{{ p.montantTotal | number:'1.3-3' }} TND</strong></td>
+            <td>
+              <span class="resultat-cell" [class.resultat-positive]="fraisLivraison - (p.montantTotal || 0) >= 0" [class.resultat-negative]="fraisLivraison - (p.montantTotal || 0) < 0">
+                <span class="material-icons">{{ fraisLivraison - (p.montantTotal || 0) >= 0 ? 'arrow_upward' : 'arrow_downward' }}</span>
+                {{ fraisLivraison - (p.montantTotal || 0) >= 0 ? '+' : '' }}{{ fraisLivraison - (p.montantTotal || 0) | number:'1.3-3' }}
+              </span>
+            </td>
             <td>
               <span class="status-badge" [ngClass]="getPaymentStatusClass(p)">{{ getPaymentStatusLabel(p) }}</span>
             </td>
@@ -221,6 +231,173 @@
       <button *ngFor="let p of getCPageNumbers()" (click)="onCPageChange(p)" [class.active]="p === cCurrentPage">{{ p + 1 }}</button>
       <button (click)="onCPageChange(cCurrentPage + 1)" [disabled]="cCurrentPage >= cTotalPages - 1"><span class="material-icons">chevron_right</span></button>
       <button (click)="onCPageChange(cTotalPages - 1)" [disabled]="cCurrentPage >= cTotalPages - 1"><span class="material-icons">last_page</span></button>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Bilan Financier ═══ -->
+  <div *ngIf="activeTab === 'bilan'">
+    <!-- Filters -->
+    <div class="bilan-filters">
+      <div class="form-group">
+        <label>Année</label>
+        <select [(ngModel)]="bilanAnnee" (change)="onBilanAnneeChange()">
+          <option [ngValue]="0">Toutes les années</option>
+          <option *ngFor="let a of bilanAnneesDisponibles" [ngValue]="a">{{ a }}</option>
+        </select>
+      </div>
+      <div class="form-group" *ngIf="bilanAnnee > 0">
+        <label>Mois</label>
+        <select [(ngModel)]="bilanMois" (change)="onBilanMoisChange()">
+          <option [ngValue]="0">Tous les mois</option>
+          <option [ngValue]="1">Janvier</option>
+          <option [ngValue]="2">Février</option>
+          <option [ngValue]="3">Mars</option>
+          <option [ngValue]="4">Avril</option>
+          <option [ngValue]="5">Mai</option>
+          <option [ngValue]="6">Juin</option>
+          <option [ngValue]="7">Juillet</option>
+          <option [ngValue]="8">Août</option>
+          <option [ngValue]="9">Septembre</option>
+          <option [ngValue]="10">Octobre</option>
+          <option [ngValue]="11">Novembre</option>
+          <option [ngValue]="12">Décembre</option>
+        </select>
+      </div>
+    </div>
+
+    <div *ngIf="bilanLoading" class="loading-state"><div class="spinner"></div><p>Chargement du bilan...</p></div>
+
+    <div *ngIf="!bilanLoading && bilanData" class="bilan-section">
+      <!-- Période & Frais -->
+      <div class="bilan-header">
+        <div class="bilan-header-left">
+          <h2>{{ bilanData.periodeLabel }}</h2>
+          <span class="bilan-frais">
+            <span class="material-icons">local_atm</span>
+            Frais livraison : <strong>{{ bilanData.fraisLivraisonUnitaire | number:'1.3-3' }} TND</strong> / commande
+          </span>
+        </div>
+        <div class="bilan-result-badge" [class.positive]="bilanData.rentable" [class.negative]="!bilanData.rentable">
+          <span class="material-icons">{{ bilanData.rentable ? 'trending_up' : 'trending_down' }}</span>
+          <span>{{ bilanData.rentable ? '+' : '' }}{{ bilanData.resultatNet | number:'1.3-3' }} TND</span>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="bilan-kpi-grid">
+        <div class="kpi-card blue">
+          <div class="kpi-icon-wrap"><span class="material-icons">local_shipping</span></div>
+          <div class="kpi-content">
+            <div class="kpi-value">{{ bilanData.totalCommandesLivrees }}</div>
+            <div class="kpi-label">Commandes livrées</div>
+          </div>
+        </div>
+        <div class="kpi-card green">
+          <div class="kpi-icon-wrap"><span class="material-icons">arrow_upward</span></div>
+          <div class="kpi-content">
+            <div class="kpi-value">+{{ bilanData.totalRevenu | number:'1.3-3' }}</div>
+            <div class="kpi-label">Revenu (TND)</div>
+          </div>
+        </div>
+        <div class="kpi-card orange">
+          <div class="kpi-icon-wrap"><span class="material-icons">arrow_downward</span></div>
+          <div class="kpi-content">
+            <div class="kpi-value">-{{ bilanData.totalCommissions | number:'1.3-3' }}</div>
+            <div class="kpi-label">Commissions (TND)</div>
+          </div>
+        </div>
+        <div class="kpi-card" [ngClass]="bilanData.rentable ? 'success' : 'deficit'">
+          <div class="kpi-icon-wrap"><span class="material-icons">{{ bilanData.rentable ? 'add_circle' : 'remove_circle' }}</span></div>
+          <div class="kpi-content">
+            <div class="kpi-value">{{ bilanData.rentable ? '+' : '' }}{{ bilanData.resultatNet | number:'1.3-3' }}</div>
+            <div class="kpi-label">Résultat Net (TND)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Classement Livreurs (Cards) ── -->
+      <div class="bilan-block" *ngIf="bilanData.bilanParLivreur && bilanData.bilanParLivreur.length > 0">
+        <h3><span class="material-icons">emoji_events</span> Performance par Livreur</h3>
+        <div class="livreur-cards-grid">
+          <div class="livreur-card" *ngFor="let l of bilanData.bilanParLivreur"
+               [class.card-positive]="l.rentable" [class.card-negative]="!l.rentable">
+            <!-- Card Header -->
+            <div class="livreur-card-header">
+              <div class="livreur-rank-avatar">
+                <span class="rang-badge" [ngClass]="{'gold': l.rang === 1, 'silver': l.rang === 2, 'bronze': l.rang === 3}">
+                  {{ l.rang }}
+                </span>
+              </div>
+              <div class="livreur-info">
+                <span class="livreur-name">{{ l.livreurNom }}</span>
+                <span class="livreur-meta">{{ l.commandesLivrees }} commande{{ l.commandesLivrees > 1 ? 's' : '' }} livrée{{ l.commandesLivrees > 1 ? 's' : '' }}</span>
+              </div>
+              <div class="livreur-result-chip" [class.chip-positive]="l.rentable" [class.chip-negative]="!l.rentable">
+                <span class="material-icons">{{ l.rentable ? 'arrow_upward' : 'arrow_downward' }}</span>
+                {{ l.rentable ? '+' : '' }}{{ l.resultatNet | number:'1.3-3' }}
+              </div>
+            </div>
+            <!-- Card Metrics -->
+            <div class="livreur-card-metrics">
+              <div class="metric-item">
+                <div class="metric-bar">
+                  <div class="metric-bar-fill green-bar" [style.width.%]="bilanData.totalRevenu > 0 ? (l.revenuGenere / bilanData.totalRevenu * 100) : 0"></div>
+                </div>
+                <div class="metric-detail">
+                  <span class="metric-label">Revenu</span>
+                  <span class="metric-value color-green">+{{ l.revenuGenere | number:'1.3-3' }}</span>
+                </div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-bar">
+                  <div class="metric-bar-fill orange-bar" [style.width.%]="bilanData.totalCommissions > 0 ? (l.commissionPayee / bilanData.totalCommissions * 100) : 0"></div>
+                </div>
+                <div class="metric-detail">
+                  <span class="metric-label">Commission</span>
+                  <span class="metric-value color-orange">-{{ l.commissionPayee | number:'1.3-3' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tendance Mensuelle ── -->
+      <div class="bilan-block" *ngIf="bilanData.bilanParMois && bilanData.bilanParMois.length > 0">
+        <h3><span class="material-icons">calendar_month</span> Tendance Mensuelle</h3>
+        <div class="trend-cards">
+          <div class="trend-card" *ngFor="let m of bilanData.bilanParMois"
+               [class.trend-positive]="m.rentable" [class.trend-negative]="!m.rentable">
+            <div class="trend-card-header">
+              <span class="trend-period">{{ m.periodeLabel }}</span>
+              <span class="trend-result-chip" [class.chip-positive]="m.rentable" [class.chip-negative]="!m.rentable">
+                <span class="material-icons">{{ m.rentable ? 'trending_up' : 'trending_down' }}</span>
+                {{ m.rentable ? '+' : '' }}{{ m.resultat | number:'1.3-3' }}
+              </span>
+            </div>
+            <div class="trend-card-body">
+              <div class="trend-stat">
+                <span class="material-icons">local_shipping</span>
+                <span class="trend-stat-val">{{ m.commandesLivrees }}</span>
+                <span class="trend-stat-label">cmd</span>
+              </div>
+              <div class="trend-stat">
+                <span class="material-icons trend-up-icon">arrow_upward</span>
+                <span class="trend-stat-val color-green">+{{ m.revenu | number:'1.3-3' }}</span>
+              </div>
+              <div class="trend-stat">
+                <span class="material-icons trend-down-icon">arrow_downward</span>
+                <span class="trend-stat-val color-orange">-{{ m.commissions | number:'1.3-3' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!bilanLoading && !bilanData" class="empty-state">
+      <span class="material-icons">analytics</span>
+      <p>Aucune donnée de bilan disponible</p>
     </div>
   </div>
 

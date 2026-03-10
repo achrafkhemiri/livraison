@@ -8,6 +8,7 @@ export interface Societe {
   telephone?: string;
   email?: string;
   actif: boolean;
+  fraisLivraison?: number;
   latitude?: number;
   longitude?: number;
 }

@@ -2,6 +2,7 @@ package com.example.backend.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -17,6 +18,7 @@ public class SocieteDTO {
     private String mf; // Matricule Fiscal
     private Double latitude;
     private Double longitude;
+    private BigDecimal fraisLivraison;
     private Integer version;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

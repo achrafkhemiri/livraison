@@ -30,6 +30,7 @@ export class SocietesComponent implements OnInit {
       telephone: '',
       email: '',
       actif: true,
+      fraisLivraison: undefined,
       latitude: undefined,
       longitude: undefined
     };

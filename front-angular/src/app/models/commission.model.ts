@@ -48,3 +48,37 @@ export interface LivreurCommissionSummary {
   configActuelle?: CommissionConfig;
   paiements: CommissionPaiement[];
 }
+
+export interface BilanPeriodeDTO {
+  annee: number;
+  mois: number;
+  periodeLabel: string;
+  commandesLivrees: number;
+  revenu: number;
+  commissions: number;
+  resultat: number;
+  rentable: boolean;
+}
+
+export interface BilanLivreurDTO {
+  rang: number;
+  livreurId: number;
+  livreurNom: string;
+  commandesLivrees: number;
+  revenuGenere: number;
+  commissionPayee: number;
+  resultatNet: number;
+  rentable: boolean;
+}
+
+export interface BilanDTO {
+  fraisLivraisonUnitaire: number;
+  periodeLabel: string;
+  totalCommandesLivrees: number;
+  totalRevenu: number;
+  totalCommissions: number;
+  resultatNet: number;
+  rentable: boolean;
+  bilanParMois: BilanPeriodeDTO[];
+  bilanParLivreur: BilanLivreurDTO[];
+}

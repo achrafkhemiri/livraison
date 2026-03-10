@@ -16,6 +16,7 @@ public class SocieteMapper {
                 .mf(societe.getMf())
                 .latitude(societe.getLatitude())
                 .longitude(societe.getLongitude())
+                .fraisLivraison(societe.getFraisLivraison())
                 .version(societe.getVersion())
                 .createdAt(societe.getCreatedAt())
                 .updatedAt(societe.getUpdatedAt())
@@ -29,6 +30,7 @@ public class SocieteMapper {
                 .id(dto.getId())
                 .raisonSociale(dto.getRaisonSociale())
                 .mf(dto.getMf())
+                .fraisLivraison(dto.getFraisLivraison())
                 .version(dto.getVersion() != null ? dto.getVersion() : 1)
                 .build();
     }
@@ -38,5 +40,6 @@ public class SocieteMapper {
         if (dto.getMf() != null) societe.setMf(dto.getMf());
         if (dto.getLatitude() != null) societe.setLatitude(dto.getLatitude());
         if (dto.getLongitude() != null) societe.setLongitude(dto.getLongitude());
+        if (dto.getFraisLivraison() != null) societe.setFraisLivraison(dto.getFraisLivraison());
     }
 }

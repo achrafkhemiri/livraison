@@ -3,6 +3,7 @@ package com.example.backend.service;
 import com.example.backend.dto.CommissionConfigDTO;
 import com.example.backend.dto.CommissionPaiementDTO;
 import com.example.backend.dto.LivreurCommissionSummaryDTO;
+import com.example.backend.dto.BilanDTO;
 import com.example.backend.dto.PageResponse;
 
 import java.math.BigDecimal;
@@ -39,4 +40,8 @@ public interface CommissionService {
 
     // ── Recalculate ────────────────────────────────────────
     int recalculateAllDistances();
+
+    // ── Bilan ──────────────────────────────────────────────
+    BilanDTO getBilan(Long societeId, Integer annee, Integer mois);
+    List<Integer> getAnneesDisponibles(Long societeId);
 }

@@ -2,6 +2,7 @@ package com.example.backend.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -44,6 +45,10 @@ public class Societe {
 
     @Column(name = "longitude")
     private Double longitude;
+
+    @Column(name = "frais_livraison", precision = 10, scale = 3)
+    @lombok.Builder.Default
+    private BigDecimal fraisLivraison = BigDecimal.ZERO;
     
     @PrePersist
     protected void onCreate() {
