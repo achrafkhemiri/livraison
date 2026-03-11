@@ -18,7 +18,7 @@ public class CommissionPaiement {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id", nullable = false)
+    @JoinColumn(name = "order_id", nullable = false, columnDefinition = "bigint unsigned")
     private Order order;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -207,7 +207,7 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderNumber(orderNum);
         
         // Set userId (utilisateur/client depuis la table 'users')
-        Long userId = orderDTO.getUserId() != null ? orderDTO.getUserId() : orderDTO.getClientId();
+        Long userId = orderDTO.getUserId();
         if (userId == null) {
             throw new BadRequestException("L'identifiant du client (userId) est obligatoire");
         }

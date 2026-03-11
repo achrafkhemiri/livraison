@@ -1,6 +1,5 @@
 package com.example.backend.dto;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -19,7 +18,6 @@ public class OrderDTO {
     private Long societeId;
     private String societeNom;
     
-    @NotNull(message = "Le client est obligatoire")
     private Long clientId;
     private String clientNom;
     private String clientPhone;
