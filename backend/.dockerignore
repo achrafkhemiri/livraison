@@ -1,0 +1,12 @@
+target/
+.git/
+.gitignore
+.idea/
+.vscode/
+*.iml
+*.log
+**/.DS_Store
+compile_*.txt
+run_log.txt
+test_*.txt
+livrasion_db_backup.sql

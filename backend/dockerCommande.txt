@@ -1,0 +1,9 @@
+Démarrer
+Set-Location "C:\Users\USER\Desktop\Nouveau dossier (2)\backend"
+docker compose -f .\compose.backend.yml up -d --build
+
+Voir les logs
+docker logs -f smart-delivery-backend
+
+Arrêter
+docker compose -f .\compose.backend.yml down
