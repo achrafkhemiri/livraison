@@ -142,6 +142,13 @@ public class OrderController {
         Long currentUserId = securityService.getCurrentUserId();
         return ResponseEntity.ok(orderService.rejectAssignment(id, currentUserId));
     }
+
+    @PatchMapping("/{id}/client-absent")
+    @PreAuthorize("hasRole('LIVREUR')")
+    public ResponseEntity<OrderDTO> reportClientAbsent(@PathVariable Long id) {
+        Long currentUserId = securityService.getCurrentUserId();
+        return ResponseEntity.ok(orderService.reportClientAbsent(id, currentUserId));
+    }
     
     @GetMapping("/proposed")
     @PreAuthorize("hasRole('LIVREUR')")

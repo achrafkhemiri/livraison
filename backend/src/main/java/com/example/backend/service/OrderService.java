@@ -25,6 +25,7 @@ public interface OrderService {
     OrderDTO assignLivreur(Long orderId, Long livreurId);
     OrderDTO acceptAssignment(Long orderId, Long livreurId);
     OrderDTO rejectAssignment(Long orderId, Long livreurId);
+    OrderDTO reportClientAbsent(Long orderId, Long livreurId);
     List<OrderDTO> findProposedOrdersForLivreur(Long livreurId);
     OrderDTO markAsCollected(Long orderId);
     OrderDTO markItemsCollected(Long orderId, java.util.List<com.example.backend.dto.CollectedItemDTO> items);

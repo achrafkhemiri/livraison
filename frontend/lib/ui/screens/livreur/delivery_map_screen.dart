@@ -1162,20 +1162,40 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
                   ),
                 ),
                 if (isSelected)
-                  SizedBox(
-                    height: r.scale(34),
-                    child: ElevatedButton.icon(
-                      onPressed: () => _markDelivered(stop),
-                      icon: Icon(Icons.local_shipping, size: r.iconSize(16)),
-                      label: Text('Livré', style: GoogleFonts.poppins(fontSize: r.fontSize(12), fontWeight: FontWeight.w600)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00c853),
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: r.space(12)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
-                        elevation: 0,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: r.scale(34),
+                        child: ElevatedButton.icon(
+                          onPressed: () => _markDelivered(stop),
+                          icon: Icon(Icons.local_shipping, size: r.iconSize(16)),
+                          label: Text('Livré', style: GoogleFonts.poppins(fontSize: r.fontSize(12), fontWeight: FontWeight.w600)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00c853),
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(horizontal: r.space(10)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
+                            elevation: 0,
+                          ),
+                        ),
                       ),
-                    ),
+                      SizedBox(width: r.space(6)),
+                      SizedBox(
+                        height: r.scale(34),
+                        child: OutlinedButton.icon(
+                          onPressed: () => _reportClientAbsent(stop),
+                          icon: Icon(Icons.person_off, size: r.iconSize(15)),
+                          label: Text('Absent', style: GoogleFonts.poppins(fontSize: r.fontSize(11), fontWeight: FontWeight.w600)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.deepOrange.shade700,
+                            side: BorderSide(color: Colors.deepOrange.shade300),
+                            padding: EdgeInsets.symmetric(horizontal: r.space(10)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.radius(10))),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -2775,6 +2795,79 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> with SingleTicker
       if (routeProvider.allDelivered) {
         _showCompletionDialog();
       }
+    }
+  }
+
+  Future<void> _reportClientAbsent(DeliveryStop stop) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.deepOrange.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.person_off, color: Colors.deepOrange),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(child: Text('Client absent ?')),
+        ]),
+        content: Text(
+          'Confirmez-vous que le client est absent pour la commande #${stop.order.id} ? Un gerant sera notifie.',
+          style: GoogleFonts.poppins(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Annuler', style: GoogleFonts.poppins(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.notifications_active, size: 18),
+            label: Text('Notifier', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepOrange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final orderProvider = context.read<OrderProvider>();
+    final success = await orderProvider.reportClientAbsent(stop.order.id!);
+
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(children: [
+            const Icon(Icons.notifications_active, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Alerte envoyee: client absent pour ${stop.name} (CMD #${stop.order.id}).')),
+          ]),
+          backgroundColor: Colors.deepOrange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Impossible d\'envoyer la notification au gerant.'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 

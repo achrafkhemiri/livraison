@@ -389,6 +389,26 @@ class OrderProvider extends ChangeNotifier {
   Future<bool> markAsDelivered(int orderId, {double? distanceKm}) async {
     return await updateOrderStatus(orderId, 'delivered', distanceKm: distanceKm);
   }
+
+  // Report absent client during delivery (livreur)
+  Future<bool> reportClientAbsent(int orderId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final updated = await _service.reportClientAbsent(orderId);
+      _updateOrderInLists(orderId, updated);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
   
   // Mark order as shipped (in transit)
   Future<bool> markAsShipped(int orderId) async {

@@ -476,6 +476,37 @@ public class OrderServiceImpl implements OrderService {
         
         return orderMapper.toDTO(order);
     }
+
+    @Override
+    public OrderDTO reportClientAbsent(Long orderId, Long livreurId) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Commande", "id", orderId));
+
+        if (order.getLivreur() == null || !order.getLivreur().getId().equals(livreurId)) {
+            throw new BadRequestException("Vous n'etes pas assigne a cette commande");
+        }
+
+        Utilisateur livreur = utilisateurRepository.findById(livreurId)
+                .orElseThrow(() -> new ResourceNotFoundException("Livreur", "id", livreurId));
+
+        if (order.getSocieteId() != null) {
+            String livreurName = (livreur.getNom() + " " + livreur.getPrenom()).trim();
+            List<Utilisateur> gerants = utilisateurRepository.findByRoleAndActifTrue(Role.GERANT);
+            for (Utilisateur gerant : gerants) {
+                if (gerant.getSociete() != null && gerant.getSociete().getId().equals(order.getSocieteId())) {
+                    notificationService.create(
+                            gerant.getId(),
+                            "ORDER_CLIENT_ABSENT",
+                            "Le client est absent pour la commande #" + order.getId() + ". Merci de verifier la suite avec " + livreurName + ".",
+                            orderId,
+                            livreurId
+                    );
+                }
+            }
+        }
+
+        return orderMapper.toDTO(order);
+    }
     
     @Override
     @Transactional(readOnly = true)

@@ -125,6 +125,12 @@ class OrderService {
     return Order.fromJson(response);
   }
 
+  /// Report that client is absent at delivery location (livreur)
+  Future<Order> reportClientAbsent(int orderId) async {
+    final response = await _api.patch('${ApiConstants.orders}/$orderId/client-absent');
+    return Order.fromJson(response);
+  }
+
   /// Get orders proposed to the current livreur
   Future<List<Order>> getProposedOrders() async {
     final response = await _api.get('${ApiConstants.orders}/proposed');
