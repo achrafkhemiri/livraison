@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { OrderService } from '../../services/order.service';
 import { ClientService } from '../../services/client.service';
 import { ProduitService } from '../../services/produit.service';
@@ -56,6 +57,8 @@ export class CommandesComponent implements OnInit {
   productsStock: ProductStockInfo[] = [];
   loadingClients = false;
   loadingProducts = false;
+  creatingOrder = false;
+  createOrderError = '';
   newOrder: Partial<Order> = {};
   selectedItems: SelectedProductItem[] = [];
 
@@ -185,6 +188,8 @@ export class CommandesComponent implements OnInit {
   // ─── Create Order ───────────────────────────────────────────────
   openCreateForm(): void {
     this.newOrder = { status: 'pending' };
+    this.createOrderError = '';
+    this.creatingOrder = false;
     this.selectedItems = [];
     this.manualAssignments = {};
     this.collectionType = 'auto';
@@ -204,13 +209,19 @@ export class CommandesComponent implements OnInit {
     });
   }
 
-  closeCreateForm(): void { this.showCreateForm = false; }
+  closeCreateForm(): void {
+    this.showCreateForm = false;
+    this.creatingOrder = false;
+    this.createOrderError = '';
+  }
 
   /** Client selected — auto-fill coordinates & address from UserDTO */
   onClientSelect(clientId: number): void {
     const client = this.clients.find(c => c.id === clientId);
     if (client) {
       this.newOrder.clientId = clientId;
+      // Backend create endpoint requires userId.
+      this.newOrder.userId = clientId;
       this.newOrder.adresseLivraison = client.address || client.adresse || '';
       this.newOrder.latitudeLivraison = client.latitude;
       this.newOrder.longitudeLivraison = client.longitude;
@@ -351,6 +362,8 @@ export class CommandesComponent implements OnInit {
 
   // ─── Submit Order ───────────────────────────────────────────────
   createOrder(): void {
+    this.createOrderError = '';
+    if (this.creatingOrder) return;
     if (!this.newOrder.clientId || this.selectedItems.length === 0) return;
 
     const items: OrderItem[] = this.selectedItems.map(item => ({
@@ -368,6 +381,7 @@ export class CommandesComponent implements OnInit {
     }
 
     const order: Order = {
+      userId: this.newOrder.clientId!,
       clientId: this.newOrder.clientId!,
       status: 'pending',
       adresseLivraison: this.newOrder.adresseLivraison,
@@ -377,8 +391,13 @@ export class CommandesComponent implements OnInit {
       items,
       collectionPlan
     };
+    this.creatingOrder = true;
     this.orderService.create(order).subscribe({
-      next: () => { this.closeCreateForm(); this.loadData(); }
+      next: () => { this.closeCreateForm(); this.loadData(); },
+      error: (error: HttpErrorResponse) => {
+        this.createOrderError = error?.error?.message || 'Creation de commande echouee.';
+        this.creatingOrder = false;
+      }
     });
   }
 

@@ -1,0 +1,60 @@
+services:
+  osrm:
+    image: osrm/osrm-backend:latest
+    container_name: smart-delivery-osrm
+    restart: unless-stopped
+    command: osrm-routed --algorithm ch /data/tunisia-latest.osrm
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../osrm-data:/data
+
+  mysql:
+    image: mariadb:10.4
+    container_name: smart-delivery-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: livrasion_db
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app123
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./livrasion_db_backup_utf8.sql:/docker-entrypoint-initdb.d/01_livrasion_db_backup.sql:ro
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smart-delivery-backend
+    restart: unless-stopped
+    depends_on:
+      - osrm
+      - mysql
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/livrasion_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: app_user
+      SPRING_DATASOURCE_PASSWORD: app123
+      SERVER_PORT: 8080
+      SERVER_ADDRESS: 0.0.0.0
+      OSRM_URL: http://osrm:5000
+
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: smart-delivery-phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 0
+
+volumes:
+  mysql_data:
+    name: smart_delivery_mysql_data

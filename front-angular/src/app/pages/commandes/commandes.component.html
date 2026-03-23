@@ -160,6 +160,7 @@
         <button class="btn-icon" (click)="closeCreateForm()"><span class="material-icons">close</span></button>
       </div>
       <div class="modal-body">
+        <div class="error-banner" *ngIf="createOrderError">{{ createOrderError }}</div>
 
         <!-- Client (from /api/users) -->
         <div class="form-group">
@@ -286,8 +287,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" (click)="closeCreateForm()">Annuler</button>
-        <button class="btn-primary" (click)="createOrder()" [disabled]="!newOrder.clientId || selectedItems.length === 0">Créer la commande</button>
+        <button class="btn-secondary" (click)="closeCreateForm()" [disabled]="creatingOrder">Annuler</button>
+        <button class="btn-primary" (click)="createOrder()" [disabled]="creatingOrder || !newOrder.clientId || selectedItems.length === 0">{{ creatingOrder ? 'Creation...' : 'Creer la commande' }}</button>
       </div>
     </div>
   </div>

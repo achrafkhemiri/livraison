@@ -4,6 +4,7 @@ import { CommissionService } from '../../services/commission.service';
 import { CommissionConfig } from '../../models/commission.model';
 import { User, CreateUtilisateur } from '../../models/user.model';
 import { AuthService } from '../../services/auth.service';
+import { HttpErrorResponse } from '@angular/common/http';
 
 @Component({
   selector: 'app-livreurs',
@@ -13,9 +14,11 @@ import { AuthService } from '../../services/auth.service';
 export class LivreursComponent implements OnInit {
   livreurs: User[] = [];
   loading = true;
+  saving = false;
   showForm = false;
   editingLivreur: User | null = null;
   formData: CreateUtilisateur = this.emptyForm();
+  errorMessage = '';
 
   // Commission config fields for the livreur form
   commissionMontantFixe: number = 0;
@@ -48,6 +51,7 @@ export class LivreursComponent implements OnInit {
 
   loadData(): void {
     this.loading = true;
+    this.errorMessage = '';
     this.utilisateurService.getLivreurs().subscribe({
       next: (data) => {
         this.livreurs = data;
@@ -60,19 +64,24 @@ export class LivreursComponent implements OnInit {
           });
         });
       },
-      error: () => { this.loading = false; }
+      error: (error: HttpErrorResponse) => {
+        this.setHttpError(error);
+        this.loading = false;
+      }
     });
   }
 
   openCreate(): void {
     this.editingLivreur = null;
     this.formData = this.emptyForm();
+    this.errorMessage = '';
     this.resetCommissionFields();
     this.showForm = true;
   }
 
   openEdit(l: User): void {
     this.editingLivreur = l;
+    this.errorMessage = '';
     this.formData = { nom: l.nom, prenom: l.prenom, email: l.email, password: '', role: 'LIVREUR', telephone: l.telephone, societeId: l.societeId };
 
     // Load existing commission config for this livreur
@@ -92,10 +101,35 @@ export class LivreursComponent implements OnInit {
     this.showForm = true;
   }
 
-  closeForm(): void { this.showForm = false; this.editingLivreur = null; }
+  closeForm(): void { this.showForm = false; this.editingLivreur = null; this.errorMessage = ''; this.saving = false; }
+
+  private setHttpError(error: HttpErrorResponse): void {
+    if (error.status === 409) {
+      this.errorMessage = error?.error?.message || 'Un utilisateur avec cet email existe deja.';
+      return;
+    }
+    if (error.status === 400) {
+      this.errorMessage = error?.error?.message || 'Donnees invalides. Verifiez les champs saisis.';
+      return;
+    }
+    this.errorMessage = 'Erreur serveur. Reessayez dans quelques instants.';
+  }
 
   save(): void {
-    if (!this.formData.nom || !this.formData.prenom || !this.formData.email) return;
+    this.errorMessage = '';
+    if (this.saving) return;
+    if (!this.formData.nom || !this.formData.prenom || !this.formData.email) {
+      this.errorMessage = 'Nom, prenom et email sont obligatoires.';
+      return;
+    }
+
+    if (!this.editingLivreur && (!this.formData.password || this.formData.password.length < 6)) {
+      this.errorMessage = 'Le mot de passe doit contenir au moins 6 caracteres.';
+      return;
+    }
+
+    this.saving = true;
+
     if (this.editingLivreur) {
       const updateData: User = {
         id: this.editingLivreur.id,
@@ -112,15 +146,22 @@ export class LivreursComponent implements OnInit {
           this.saveCommissionConfig(this.editingLivreur!.id);
           this.closeForm();
           this.loadData();
+        },
+        error: (error: HttpErrorResponse) => {
+          this.setHttpError(error);
+          this.saving = false;
         }
       });
     } else {
-      if (!this.formData.password) return;
       this.utilisateurService.create(this.formData).subscribe({
         next: (created) => {
           this.saveCommissionConfig(created.id);
           this.closeForm();
           this.loadData();
+        },
+        error: (error: HttpErrorResponse) => {
+          this.setHttpError(error);
+          this.saving = false;
         }
       });
     }

@@ -1,0 +1,32 @@
+services:
+  mysql:
+    image: mariadb:10.4
+    container_name: smart-delivery-mysql
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: livrasion_db
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app123
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Imported only on first startup when volume is empty.
+      - ./livrasion_db_backup_utf8.sql:/docker-entrypoint-initdb.d/01_livrasion_db_backup.sql:ro
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: smart-delivery-phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 0
+
+volumes:
+  mysql_data:
+    name: smart_delivery_mysql_data

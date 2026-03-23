@@ -1,9 +1,40 @@
-Démarrer
+BACKEND seulement (MySQL local Windows)
 Set-Location "C:\Users\USER\Desktop\Nouveau dossier (2)\backend"
 docker compose -f .\compose.backend.yml up -d --build
-
-Voir les logs
 docker logs -f smart-delivery-backend
-
-Arrêter
 docker compose -f .\compose.backend.yml down
+
+STACK COMPLETE (backend + DB + phpMyAdmin + OSRM)
+Set-Location "C:\Users\USER\Desktop\Nouveau dossier (2)\backend"
+docker rm -f osrm-tunisia
+docker compose -f .\compose.full.yml up -d --build
+docker compose -f .\compose.full.yml ps
+docker compose -f .\compose.full.yml down
+
+MYSQL + phpMyAdmin (avec conservation des donnees)
+Set-Location "C:\Users\USER\Desktop\Nouveau dossier (2)\backend"
+docker compose -f .\compose.db.yml up -d
+
+Fichier de dump utilise a l'initialisation
+livrasion_db_backup_utf8.sql
+
+Acces phpMyAdmin
+http://localhost:8081
+Serveur: mysql
+Utilisateur: app_user
+Mot de passe: app123
+
+Port MySQL Docker cote Windows
+3307
+
+Arreter la stack DB
+docker compose -f .\compose.db.yml down
+
+Supprimer aussi les donnees (attention)
+docker compose -f .\compose.db.yml down -v
+
+Backup de la base Docker MySQL
+.\backup_mysql.ps1
+
+Restauration d'un dump SQL vers Docker MySQL
+.\restore_mysql.ps1 -InputFile .\livrasion_db_backup_utf8.sql
